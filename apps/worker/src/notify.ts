@@ -112,3 +112,27 @@ export async function runCleanup(pool: Pool): Promise<{ deletedRuns: number; del
   }
   return { deletedRuns: delRuns.length, deletedFiles };
 }
+
+// Rate-Limit: max. N Läufe pro Tag pro Domain (bereits rate_limited-Läufe zählen nicht).
+export async function checkRateLimit(pool: Pool, agentSite: string, runId: string): Promise<{ limited: boolean; count: number; limit: number }> {
+  const { rows: srows } = await pool.query(`SELECT value FROM settings WHERE key = 'rate_limit_per_day'`);
+  const limit = typeof srows[0]?.value === 'number' ? srows[0].value : 12;
+
+  let host: string;
+  try { host = new URL(agentSite).hostname; } catch { return { limited: false, count: 0, limit }; }
+
+  const { rows: agents } = await pool.query('SELECT id, site FROM agents');
+  const ids = agents
+    .filter((a: any) => { try { return new URL(a.site).hostname === host; } catch { return false; } })
+    .map((a: any) => a.id);
+  if (ids.length === 0) return { limited: false, count: 0, limit };
+
+  const { rows } = await pool.query(
+    `SELECT count(*)::int AS c FROM runs
+      WHERE agent_id = ANY($1) AND created_at::date = CURRENT_DATE
+        AND id <> $2 AND (error IS DISTINCT FROM 'rate_limited')`,
+    [ids, runId]
+  );
+  const count = rows[0].c;
+  return { limited: count >= limit, count, limit };
+}

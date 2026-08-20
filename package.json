@@ -13,6 +13,7 @@
     "dev:web": "npm run dev --workspace=@checky/web",
     "build": "npm run build --workspace=@checky/web",
     "test": "npm run test --workspaces --if-present",
+    "lint": "tsc -p packages/shared/tsconfig.json --noEmit && tsc -p apps/api/tsconfig.json --noEmit && tsc -p apps/worker/tsconfig.json --noEmit && tsc -p apps/web/tsconfig.json --noEmit",
     "clean": "rm -rf dist server.js apps/*/dist"
   },
   "dependencies": {

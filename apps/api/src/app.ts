@@ -331,6 +331,22 @@ app.post('/api/admin/cleanup', asyncHandler(async (req, res) => {
   res.json({ ok: true, queued: !!boss });
 }));
 
+// Prometheus-Metriken.
+app.get('/metrics', asyncHandler(async (req, res) => {
+  const byStatus = await query(`SELECT status, count(*)::int AS c FROM runs GROUP BY status`);
+  const tokens = await query(`SELECT COALESCE(SUM(ai_tokens), 0)::int AS s FROM runs`);
+  const queued = await query(`SELECT count(*)::int AS c FROM runs WHERE status = 'queued'`);
+
+  let out = '';
+  out += '# HELP checky_runs_total Anzahl Läufe nach Status\n# TYPE checky_runs_total counter\n';
+  for (const r of byStatus.rows) out += `checky_runs_total{status="${r.status}"} ${r.c}\n`;
+  out += '# HELP checky_ai_tokens_total Verbrauchte KI-Tokens gesamt\n# TYPE checky_ai_tokens_total counter\n';
+  out += `checky_ai_tokens_total ${tokens.rows[0].s}\n`;
+  out += '# HELP checky_queue_depth Anzahl wartender Läufe\n# TYPE checky_queue_depth gauge\n';
+  out += `checky_queue_depth ${queued.rows[0].c}\n`;
+  res.type('text/plain').send(out);
+}));
+
 app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
   if (err instanceof z.ZodError) {
     return res.status(400).json({ error: 'Validation error: ' + (err as any).issues.map((e: any) => `${e.path.join('.')}: ${e.message}`).join(', ') });

@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import { executeRecipe } from './executor.js';
 import { ClaudeAgentProvider } from './aiProvider.js';
 import { runRecorderSession } from './recorder.js';
-import { enqueueNotification, processOutbox, runCleanup } from './notify.js';
+import { enqueueNotification, processOutbox, runCleanup, checkRateLimit } from './notify.js';
 
 const dbUrl = process.env.DB_URL;
 // KI nur aktiv, wenn ein Abo-Token vorhanden ist (sonst kein Self-Healing -> Run failt sauber).
@@ -167,6 +167,14 @@ async function handleJob(job: any) {
   await pool!.query(`UPDATE runs SET status = 'running', started_at = NOW() WHERE id = $1`, [run_id]);
 
   console.log(`[Worker] Started run ${run_id} for agent ${agent.name} (Source: ${source})`);
+
+  // Rate-Limit: max. N Läufe pro Tag pro Domain.
+  const rl = await checkRateLimit(pool!, agent.site, run_id);
+  if (rl.limited) {
+    console.log(`[Worker] Run ${run_id} rate_limited (${rl.count}/${rl.limit} für ${agent.site})`);
+    await pool!.query(`UPDATE runs SET status='failed', finished_at=NOW(), error='rate_limited' WHERE id=$1`, [run_id]);
+    return;
+  }
 
   try {
     // 5. Fetch Recipe
