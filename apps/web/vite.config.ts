@@ -15,7 +15,7 @@ export default defineConfig(() => {
     server: {
       // Selbst-gehostetes Tool: Zugriff über beliebigen Host/IP (Docker-Service "web",
       // Proxmox-VM-IP, Hostname) erlauben – sonst blockt Vite mit "Blocked request".
-      allowedHosts: true,
+      allowedHosts: true as const,
       // Im Docker-Stack läuft die API als Service "api" auf 8080.
       // Lokal (ohne Docker) via API_PROXY_TARGET überschreibbar.
       proxy: {
