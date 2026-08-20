@@ -49,10 +49,10 @@ recorder: ## Startet den interaktiven Recorder
 test: ## Führt die Unit-Tests aus
 	npm test
 
-e2e: ## Führt End-to-End-Tests aus
-	npm run test:e2e
+e2e: ## Führt End-to-End-Tests gegen den laufenden Stack aus (im worker-Container)
+	$(COMPOSE) exec -T worker npx playwright test --config apps/worker/e2e/playwright.config.ts
 
-lint: ## Führt den Linter über das Projekt aus
+lint: ## Führt den TypeScript-Typecheck über alle Pakete aus
 	npm run lint
 
 clean: ## Entfernt alle Build-Artefakte und node_modules
