@@ -196,7 +196,7 @@ export async function executeRecipe(
       const zodSchema = jsonSchemaToZod(agent.result_schema);
       const parsed = zodSchema.safeParse(resultData);
       if (!parsed.success) {
-        throw new Error('Result schema validation failed: ' + parsed.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', '));
+        throw new Error('Result schema validation failed: ' + parsed.error.issues.map(e => `${e.path.join('.')}: ${e.message}`).join(', '));
       }
     }
 

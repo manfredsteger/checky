@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../api/client';
-import * as cronParser from 'cron-parser';
+import { CronExpressionParser } from 'cron-parser';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 
@@ -77,7 +77,7 @@ export default function ProjectDetail() {
             {agents?.map(agent => {
               let nextRun = 'Ungültiger Cron';
               try {
-                const interval = cronParser.parseExpression(agent.schedule_cron);
+                const interval = CronExpressionParser.parse(agent.schedule_cron);
                 nextRun = format(interval.next().toDate(), "dd. MMM, HH:mm 'Uhr'", { locale: de });
               } catch (e) {}
 

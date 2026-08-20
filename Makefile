@@ -32,10 +32,10 @@ ps: ## Listet alle laufenden Container auf
 	$(COMPOSE) ps
 
 migrate: ## Führt die DB-Migrationen aus
-	$(COMPOSE) exec api npm run migrate up
+	$(COMPOSE) exec -w /app/apps/api api npm run migrate up
 
 seed: ## Füllt die Datenbank mit Initialdaten
-	$(COMPOSE) exec api npx tsx src/db/seed.ts
+	$(COMPOSE) exec -w /app/apps/api api npx tsx src/db/seed.ts
 
 db-shell: ## Öffnet eine interaktive PostgreSQL-Shell
 	$(COMPOSE) exec db psql -U checky -d checky

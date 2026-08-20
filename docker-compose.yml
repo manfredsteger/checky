@@ -22,6 +22,9 @@ services:
     environment:
       - DB_URL=${DB_URL:-postgres://checky:changeme@db:5432/checky}
       - PORT_API=8080
+      - SCREENSHOT_DIR=/data/screenshots
+    volumes:
+      - ./data/screenshots:/data/screenshots
     depends_on:
       db:
         condition: service_healthy
@@ -43,6 +46,7 @@ services:
     environment:
       - DB_URL=${DB_URL:-postgres://checky:changeme@db:5432/checky}
       - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN}
+      - SCREENSHOT_DIR=/data/screenshots
     volumes:
       - ./data/screenshots:/data/screenshots
     depends_on:

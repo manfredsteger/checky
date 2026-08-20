@@ -19,9 +19,12 @@ if (!pool) {
   
   const initDb = async () => {
     const __dirname = path.dirname(fileURLToPath(import.meta.url));
-    const schema1 = fs.readFileSync(path.join(__dirname, '../migrations/1715000000000_init_schema.up.sql'), 'utf-8');
-    const schema2 = fs.readFileSync(path.join(__dirname, '../migrations/1787065788000_add_settings_table.up.sql'), 'utf-8');
-    
+    // Migrationen liegen als node-pg-migrate-Einzeldateien vor (-- Up / -- Down Migration).
+    // Für den PGlite-Preview nur den Up-Teil ausführen.
+    const upPart = (sql: string) => sql.split(/--\s*Down Migration/i)[0];
+    const schema1 = upPart(fs.readFileSync(path.join(__dirname, '../migrations/1715000000000_init_schema.sql'), 'utf-8'));
+    const schema2 = upPart(fs.readFileSync(path.join(__dirname, '../migrations/1787065788000_add_settings_table.sql'), 'utf-8'));
+
     const safeSchema1 = schema1
       .replace(/uuid_generate_v4\(\)/g, 'gen_random_uuid()')
       .replace(/CREATE EXTENSION IF NOT EXISTS "uuid-ossp";/g, '');

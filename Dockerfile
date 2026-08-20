@@ -20,7 +20,7 @@ EXPOSE 3000
 CMD ["npm", "run", "dev", "--workspace=@checky/web"]
 
 # Worker Stage (Playwright + Claude Agent SDK)
-FROM mcr.microsoft.com/playwright:v1-jammy AS worker
+FROM mcr.microsoft.com/playwright:v1.62.1-jammy AS worker
 WORKDIR /app
 
 # Install Node.js dependencies

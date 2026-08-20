@@ -1,4 +1,4 @@
-import PgBoss from 'pg-boss';
+import { PgBoss } from 'pg-boss';
 import pg from 'pg';
 import crypto from 'crypto';
 import { executeRecipe } from './executor.js';
@@ -24,17 +24,27 @@ async function start() {
   await boss.start();
   console.log('[Worker] pg-boss started');
 
-  // Handle jobs
-  await boss.work('agent-run:*', {
-    teamSize: 10,
-    teamConcurrency: 5,
-    newJobCheckInterval: 2000
-  } as any, jobHandler);
-
-  // Initial scheduling
+  // pg-boss v12: Queues müssen existieren, Wildcard-work gibt es nicht.
+  // -> Pro Agent eine Queue mit eigenem Worker, registriert in updateSchedules().
   await updateSchedules();
-  // Poll agents every 60s
+  // Agenten alle 60s neu abgleichen (neue/geänderte/deaktivierte Agenten)
   setInterval(updateSchedules, 60000);
+}
+
+// Queues, für die bereits ein Worker registriert wurde
+const workingQueues = new Set<string>();
+
+async function ensureQueueWorker(queueName: string) {
+  if (workingQueues.has(queueName)) return;
+  try {
+    await boss!.createQueue(queueName);
+  } catch {
+    // Queue existiert bereits -> ok
+  }
+  await boss!.work(queueName, { batchSize: 1 }, async (jobs: any[]) => {
+    for (const job of jobs) await handleJob(job);
+  });
+  workingQueues.add(queueName);
 }
 
 async function updateSchedules() {
@@ -45,21 +55,25 @@ async function updateSchedules() {
     for (const agent of agents) {
       if (agent.enabled) {
         currentEnabled.add(agent.id);
-        const queueName = `agent-run:${agent.id}`;
-        // Schedule agent run with retry policies
-        await boss!.schedule(queueName, agent.schedule_cron, { agent_id: agent.id, source: 'cron' }, {
-          retryLimit: 2,
-          retryBackoff: true,
-          tz: 'UTC' // Optional timezone handling
-        });
+        const queueName = `agent-run-${agent.id}`;
+        try {
+          await ensureQueueWorker(queueName);
+          await boss!.schedule(queueName, agent.schedule_cron, { agent_id: agent.id, source: 'cron' }, {
+            retryLimit: 2,
+            retryBackoff: true,
+            tz: 'UTC' // Optional timezone handling
+          });
+        } catch (e) {
+          console.error(`[Worker] Konnte Agent ${agent.name} (${agent.id}) nicht planen:`, e);
+        }
       }
     }
 
     // Unschedule disabled or deleted agents
     const { rows: schedules } = await pool!.query('SELECT name FROM pgboss.schedule');
     for (const row of schedules) {
-      if (row.name.startsWith('agent-run:')) {
-        const agentId = row.name.split(':')[1];
+      if (row.name.startsWith('agent-run-')) {
+        const agentId = row.name.slice('agent-run-'.length);
         if (!currentEnabled.has(agentId)) {
           await boss!.unschedule(row.name);
         }
@@ -70,7 +84,7 @@ async function updateSchedules() {
   }
 }
 
-async function jobHandler(job: any) {
+async function handleJob(job: any) {
   const { agent_id, source = 'manual', run_id: existing_run_id } = job.data;
 
   // 1. Check Global Kill-Switch

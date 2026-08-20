@@ -1,5 +1,5 @@
 import pg from 'pg';
-import PgBoss from 'pg-boss';
+import { PgBoss } from 'pg-boss';
 
 const dbUrl = process.env.DB_URL;
 
@@ -31,7 +31,9 @@ async function runOnce() {
     [agent.id]
   );
 
-  const jobId = await boss.send(`agent-run:${agent.id}`, {
+  const queueName = `agent-run-${agent.id}`;
+  try { await boss.createQueue(queueName); } catch { /* existiert bereits */ }
+  const jobId = await boss.send(queueName, {
     agent_id: agent.id,
     run_id: runs[0].id,
     source: 'cli'

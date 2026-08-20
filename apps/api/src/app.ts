@@ -213,9 +213,11 @@ app.post('/api/agents/:id/trigger', asyncHandler(async (req, res) => {
 
   const result = await query(`INSERT INTO runs (agent_id, status) VALUES ($1, 'queued') RETURNING *`, [id]);
   
-  // Push to pg-boss
+  // Push to pg-boss (pg-boss v12: Queue muss existieren, bevor gesendet wird)
   if (boss) {
-    await boss.send(`agent-run:${id}`, {
+    const queueName = `agent-run-${id}`;
+    try { await boss.createQueue(queueName); } catch { /* existiert bereits */ }
+    await boss.send(queueName, {
       agent_id: id,
       run_id: result.rows[0].id,
       source: 'manual'
@@ -232,7 +234,7 @@ app.post('/api/agents/:id/trigger', asyncHandler(async (req, res) => {
 
 app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
   if (err instanceof z.ZodError) {
-    return res.status(400).json({ error: 'Validation error: ' + (err as any).errors.map((e: any) => `${e.path.join('.')}: ${e.message}`).join(', ') });
+    return res.status(400).json({ error: 'Validation error: ' + (err as any).issues.map((e: any) => `${e.path.join('.')}: ${e.message}`).join(', ') });
   }
   console.error('[API Error]', err);
   
