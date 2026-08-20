@@ -1,0 +1,25 @@
+{
+  "name": "@checky/api",
+  "version": "1.0.0",
+  "private": true,
+  "main": "src/index.ts",
+  "type": "module",
+  "scripts": {
+    "migrate": "node-pg-migrate -m migrations -d DB_URL",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.5.5",
+    "express": "^4.21.2",
+    "node-pg-migrate": "^7.9.0",
+    "pg": "^8.13.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/pg": "^8.11.10",
+    "@types/supertest": "^6.0.2",
+    "supertest": "^7.0.0",
+    "vitest": "^2.0.0"
+  }
+}

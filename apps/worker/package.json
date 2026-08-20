@@ -1,0 +1,24 @@
+{
+  "name": "@checky/worker",
+  "version": "1.0.0",
+  "private": true,
+  "main": "src/index.ts",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@checky/shared": "workspace:*",
+    "pg": "^8.13.1",
+    "pg-boss": "^10.1.4",
+    "playwright": "^1.62.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@types/pg": "^8.11.10",
+    "tsx": "^4.21.0",
+    "vitest": "^4.1.11"
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "name": "checky-monorepo",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:api\" \"npm run dev:web\"",
+    "dev:api": "tsx apps/api/src/index.ts",
+    "dev:web": "npm run dev --workspace=@checky/web",
+    "build": "npm run build --workspace=@checky/web",
+    "clean": "rm -rf dist server.js apps/*/dist"
+  },
+  "dependencies": {
+    "@checky/shared": "workspace:*",
+    "@google/genai": "^2.4.0",
+    "@tailwindcss/vite": "^4.1.14",
+    "@tanstack/react-query": "^5.101.4",
+    "@vitejs/plugin-react": "^5.0.4",
+    "concurrently": "^10.0.5",
+    "cron-parser": "^5.10.0",
+    "date-fns": "^4.4.0",
+    "dotenv": "^17.2.3",
+    "express": "^4.21.2",
+    "lucide-react": "^1.32.0",
+    "motion": "^12.23.24",
+    "pg-boss": "^12.27.0",
+    "react": "^19.0.1",
+    "react-dom": "^19.0.1",
+    "react-router-dom": "^7.18.2",
+    "vite": "^6.2.3"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.14.0",
+    "autoprefixer": "^10.4.21",
+    "esbuild": "^0.25.0",
+    "tailwindcss": "^4.1.14",
+    "tsx": "^4.21.0",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.3"
+  }
+}
