@@ -1,4 +1,4 @@
-import { Project, Agent, Run, Result, CreateProject, UpdateProject, CreateAgent, UpdateAgent } from '@checky/shared';
+import { Project, Agent, Run, Result, CreateProject, UpdateProject, CreateAgent, UpdateAgent, RecorderSession } from '@checky/shared';
 
 const baseUrl = '/api';
 
@@ -47,5 +47,11 @@ export const api = {
   getRuns: (params?: { project_id?: string; agent_id?: string; status?: string }) => {
     const query = new URLSearchParams(params as Record<string, string>);
     return fetcher<RunWithAgent[]>(`/runs?${query.toString()}`);
-  }
+  },
+
+  // Recorder
+  startRecorder: (agentId: string) => fetcher<RecorderSession>(`/agents/${agentId}/recorder`, { method: 'POST' }),
+  getRecorder: (sid: string) => fetcher<RecorderSession>(`/recorder/${sid}`),
+  confirmRecorder: (sid: string) => fetcher<{ version: number }>(`/recorder/${sid}/confirm`, { method: 'POST' }),
+  abortRecorder: (sid: string) => fetcher<RecorderSession>(`/recorder/${sid}/abort`, { method: 'POST' }),
 };

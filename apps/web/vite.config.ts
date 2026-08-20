@@ -13,8 +13,10 @@ export default defineConfig(() => {
       },
     },
     server: {
+      // Im Docker-Stack läuft die API als Service "api" auf 8080.
+      // Lokal (ohne Docker) via API_PROXY_TARGET überschreibbar.
       proxy: {
-        '/api': 'http://localhost:3001'
+        '/api': process.env.API_PROXY_TARGET || 'http://api:8080'
       },
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Do not modifyâfile watching is disabled to prevent flickering during agent edits.

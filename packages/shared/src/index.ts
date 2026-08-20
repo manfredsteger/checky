@@ -134,3 +134,32 @@ export interface AIProvider {
   // Extrahiert strukturierte Daten aus dem Seitentext gemäß JSON-Schema (Fallback).
   extractJson(pageText: string, jsonSchema: unknown): Promise<ExtractResult>;
 }
+
+// --- Recorder (Schritt 19): Anlernen per Sprache -----------------------------
+
+export const RecorderStatus = z.enum(['running', 'awaiting_confirm', 'completed', 'aborted', 'failed']);
+export type RecorderStatus = z.infer<typeof RecorderStatus>;
+
+// Ein mitgeschnittenes Ereignis (eine Browseraktion des Anlern-Agenten).
+export const RecorderEventSchema = z.object({
+  ts: z.number(),                       // Zeitstempel (ms)
+  tool: z.string(),                     // MCP-/Tool-Name
+  input: z.record(z.string(), z.any()).nullable().optional(),
+  result: z.string().nullable().optional(),
+  isSubmit: z.boolean().optional(),     // markiert Submit-artige Aktionen (Bestätigungsdialog)
+});
+export type RecorderEvent = z.infer<typeof RecorderEventSchema>;
+
+export const RecorderSessionSchema = z.object({
+  id: z.string().uuid(),
+  agent_id: z.string().uuid(),
+  status: RecorderStatus,
+  events: z.array(RecorderEventSchema).default([]),
+  recipe_preview: z.array(z.any()).nullable().optional(),
+  result_fields: z.array(z.string()).nullable().optional(),
+  screenshot_path: z.string().nullable().optional(),
+  error: z.string().nullable().optional(),
+  created_at: z.coerce.date(),
+  updated_at: z.coerce.date().optional(),
+});
+export type RecorderSession = z.infer<typeof RecorderSessionSchema>;
