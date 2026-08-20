@@ -1,0 +1,244 @@
+import express, { Request, Response, NextFunction } from 'express';
+import { z } from 'zod';
+import { CreateProjectSchema, UpdateProjectSchema, CreateAgentSchema, UpdateAgentSchema } from '@checky/shared';
+import { query } from './db.js';
+// @ts-ignore
+import { PgBoss } from 'pg-boss';
+
+const dbUrl = process.env.DB_URL;
+let boss: PgBoss | null = null;
+
+if (dbUrl) {
+  boss = new PgBoss(dbUrl);
+  boss.on('error', (error: any) => console.error('[API pg-boss error]', error));
+  boss.start().catch(console.error);
+} else {
+  console.warn('[API] WARNUNG: DB_URL fehlt. PgBoss deaktiviert.');
+}
+
+export const app = express();
+app.use(express.json());
+
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', service: 'checky-api', timestamp: new Date().toISOString() });
+});
+
+const asyncHandler = (fn: (req: Request, res: Response, next: NextFunction) => Promise<any>) =>
+  (req: Request, res: Response, next: NextFunction) => {
+    Promise.resolve(fn(req, res, next)).catch(next);
+  };
+
+const IdParamSchema = z.object({ id: z.string().uuid() });
+const PaginationSchema = z.object({ limit: z.coerce.number().int().min(1).max(100).default(50) });
+
+// Projects
+app.get('/api/projects', asyncHandler(async (req, res) => {
+  const result = await query('SELECT * FROM projects ORDER BY created_at DESC');
+  res.json(result.rows);
+}));
+
+app.post('/api/projects', asyncHandler(async (req, res) => {
+  const data = CreateProjectSchema.parse(req.body);
+  const result = await query(
+    'INSERT INTO projects (name, description) VALUES ($1, $2) RETURNING *',
+    [data.name, data.description || null]
+  );
+  res.status(201).json(result.rows[0]);
+}));
+
+app.get('/api/projects/:id', asyncHandler(async (req, res) => {
+  const { id } = IdParamSchema.parse(req.params);
+  const result = await query('SELECT * FROM projects WHERE id = $1', [id]);
+  if (result.rowCount === 0) return res.status(404).json({ error: 'Project not found' });
+  res.json(result.rows[0]);
+}));
+
+app.patch('/api/projects/:id', asyncHandler(async (req, res) => {
+  const { id } = IdParamSchema.parse(req.params);
+  const data = UpdateProjectSchema.parse(req.body);
+  
+  const current = await query('SELECT * FROM projects WHERE id = $1', [id]);
+  if (current.rowCount === 0) return res.status(404).json({ error: 'Project not found' });
+
+  const result = await query(
+    'UPDATE projects SET name = COALESCE($1, name), description = COALESCE($2, description) WHERE id = $3 RETURNING *',
+    [data.name, data.description, id]
+  );
+  res.json(result.rows[0]);
+}));
+
+app.delete('/api/projects/:id', asyncHandler(async (req, res) => {
+  const { id } = IdParamSchema.parse(req.params);
+  const result = await query('DELETE FROM projects WHERE id = $1 RETURNING *', [id]);
+  if (result.rowCount === 0) return res.status(404).json({ error: 'Project not found' });
+  res.json(result.rows[0]);
+}));
+
+// Nested Agents
+app.get('/api/projects/:id/agents', asyncHandler(async (req, res) => {
+  const { id } = IdParamSchema.parse(req.params);
+  const project = await query('SELECT id FROM projects WHERE id = $1', [id]);
+  if (project.rowCount === 0) return res.status(404).json({ error: 'Project not found' });
+
+  const result = await query('SELECT * FROM agents WHERE project_id = $1 ORDER BY created_at DESC', [id]);
+  res.json(result.rows);
+}));
+
+app.post('/api/projects/:id/agents', asyncHandler(async (req, res) => {
+  const { id } = IdParamSchema.parse(req.params);
+  const data = CreateAgentSchema.parse(req.body);
+
+  const project = await query('SELECT id FROM projects WHERE id = $1', [id]);
+  if (project.rowCount === 0) return res.status(404).json({ error: 'Project not found' });
+
+  const result = await query(
+    `INSERT INTO agents (project_id, name, site, goal_text, params, schedule_cron, jitter_min, enabled, notify, result_schema)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+    [id, data.name, data.site, data.goal_text, data.params, data.schedule_cron, data.jitter_min, data.enabled, data.notify, data.result_schema]
+  );
+  res.status(201).json(result.rows[0]);
+}));
+
+// Flat Agents
+app.get('/api/agents/:id', asyncHandler(async (req, res) => {
+  const { id } = IdParamSchema.parse(req.params);
+  const result = await query('SELECT * FROM agents WHERE id = $1', [id]);
+  if (result.rowCount === 0) return res.status(404).json({ error: 'Agent not found' });
+  res.json(result.rows[0]);
+}));
+
+app.get('/api/runs', asyncHandler(async (req, res) => {
+  const { limit } = PaginationSchema.parse(req.query);
+  const projectId = req.query.project_id as string | undefined;
+  const agentId = req.query.agent_id as string | undefined;
+  const status = req.query.status as string | undefined;
+
+  let queryStr = `
+    SELECT r.*, a.project_id, a.name as agent_name 
+    FROM runs r 
+    JOIN agents a ON r.agent_id = a.id 
+    WHERE 1=1
+  `;
+  const params: any[] = [];
+
+  if (projectId) {
+    params.push(projectId);
+    queryStr += ` AND a.project_id = $${params.length}`;
+  }
+  if (agentId) {
+    params.push(agentId);
+    queryStr += ` AND r.agent_id = $${params.length}`;
+  }
+  if (status) {
+    params.push(status);
+    queryStr += ` AND r.status = $${params.length}`;
+  }
+
+  params.push(limit);
+  queryStr += ` ORDER BY r.created_at DESC LIMIT $${params.length}`;
+
+  const result = await query(queryStr, params);
+  res.json(result.rows);
+}));
+
+import path from 'path';
+
+app.get('/api/screenshots/:file', (req, res) => {
+  const file = req.params.file;
+  if (!/^[a-zA-Z0-9_-]+\.png$/.test(file)) {
+    return res.status(400).send('Invalid file name');
+  }
+  const screenshotsDir = process.env.SCREENSHOT_DIR || path.join(process.cwd(), 'data', 'screenshots');
+  res.sendFile(path.join(screenshotsDir, file));
+});
+
+app.patch('/api/agents/:id', asyncHandler(async (req, res) => {
+  const { id } = IdParamSchema.parse(req.params);
+  const data = UpdateAgentSchema.parse(req.body);
+
+  const current = await query('SELECT * FROM agents WHERE id = $1', [id]);
+  if (current.rowCount === 0) return res.status(404).json({ error: 'Agent not found' });
+
+  const result = await query(
+    `UPDATE agents SET 
+      name = COALESCE($1, name),
+      site = COALESCE($2, site),
+      goal_text = COALESCE($3, goal_text),
+      params = COALESCE($4, params),
+      schedule_cron = COALESCE($5, schedule_cron),
+      jitter_min = COALESCE($6, jitter_min),
+      enabled = COALESCE($7, enabled),
+      notify = COALESCE($8, notify),
+      result_schema = COALESCE($9, result_schema)
+     WHERE id = $10 RETURNING *`,
+    [data.name, data.site, data.goal_text, data.params, data.schedule_cron, data.jitter_min, data.enabled, data.notify, data.result_schema, id]
+  );
+  res.json(result.rows[0]);
+}));
+
+app.delete('/api/agents/:id', asyncHandler(async (req, res) => {
+  const { id } = IdParamSchema.parse(req.params);
+  const result = await query('DELETE FROM agents WHERE id = $1 RETURNING *', [id]);
+  if (result.rowCount === 0) return res.status(404).json({ error: 'Agent not found' });
+  res.json(result.rows[0]);
+}));
+
+app.get('/api/agents/:id/runs', asyncHandler(async (req, res) => {
+  const { id } = IdParamSchema.parse(req.params);
+  const { limit } = PaginationSchema.parse(req.query);
+  
+  const agent = await query('SELECT id FROM agents WHERE id = $1', [id]);
+  if (agent.rowCount === 0) return res.status(404).json({ error: 'Agent not found' });
+
+  const result = await query('SELECT * FROM runs WHERE agent_id = $1 ORDER BY created_at DESC LIMIT $2', [id, limit]);
+  res.json(result.rows);
+}));
+
+app.get('/api/agents/:id/results', asyncHandler(async (req, res) => {
+  const { id } = IdParamSchema.parse(req.params);
+  const { limit } = PaginationSchema.parse(req.query);
+  
+  const agent = await query('SELECT id FROM agents WHERE id = $1', [id]);
+  if (agent.rowCount === 0) return res.status(404).json({ error: 'Agent not found' });
+
+  const result = await query('SELECT * FROM results WHERE agent_id = $1 ORDER BY created_at DESC LIMIT $2', [id, limit]);
+  res.json(result.rows);
+}));
+
+app.post('/api/agents/:id/trigger', asyncHandler(async (req, res) => {
+  const { id } = IdParamSchema.parse(req.params);
+  
+  const agent = await query('SELECT id FROM agents WHERE id = $1', [id]);
+  if (agent.rowCount === 0) return res.status(404).json({ error: 'Agent not found' });
+
+  const result = await query(`INSERT INTO runs (agent_id, status) VALUES ($1, 'queued') RETURNING *`, [id]);
+  
+  // Push to pg-boss
+  if (boss) {
+    await boss.send(`agent-run:${id}`, {
+      agent_id: id,
+      run_id: result.rows[0].id,
+      source: 'manual'
+    }, {
+      retryLimit: 2,
+      retryBackoff: true
+    });
+  } else {
+    console.warn('[API] DB_URL fehlt, Job konnte nicht an pg-boss gesendet werden.');
+  }
+
+  res.status(201).json(result.rows[0]);
+}));
+
+app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
+  if (err instanceof z.ZodError) {
+    return res.status(400).json({ error: 'Validation error: ' + (err as any).errors.map((e: any) => `${e.path.join('.')}: ${e.message}`).join(', ') });
+  }
+  console.error('[API Error]', err);
+  
+  if (err.message?.includes('Database is disabled')) {
+    return res.status(503).json({ error: err.message });
+  }
+  
+  res.status(500).json({ error: 'Internal Server Error' });
+});
