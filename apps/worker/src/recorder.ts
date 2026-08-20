@@ -1,10 +1,11 @@
 import { query, tool, createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
-import { chromium, Browser, BrowserContext, Page } from 'playwright';
+import { Browser, BrowserContext, Page } from 'playwright';
 import { z } from 'zod';
 import path from 'path';
 import fs from 'fs';
 import type { Pool } from 'pg';
 import { getLocator } from './executor.js';
+import { launchBrowser, createContext } from './browser.js';
 
 // Buttons/Links, die der Anlern-Agent NIEMALS auslösen darf (SPEC §A.5).
 const DENY_ACTION = /(buchen|kaufen|bezahlen|anmelden|bestellen|einkauf|checkout|\bbuy\b|purchase|\bpay\b|log[- ]?in|sign[- ]?in|anmelden|registrieren|sign[- ]?up)/i;
@@ -245,8 +246,8 @@ export async function runRecorderSession(sessionId: string, agent: any, pool: Po
   };
 
   try {
-    browser = await chromium.launch({ headless: process.env.HEADLESS !== 'false' });
-    context = await browser.newContext({ locale: 'de-DE', timezoneId: 'Europe/Berlin', viewport: { width: 1440, height: 900 } });
+    browser = await launchBrowser();
+    context = await createContext(browser, { viewport: { width: 1440, height: 900 } });
     context.setDefaultTimeout(30000);
     page = await context.newPage();
     // Domain-Allowlist als zweite Verteidigungslinie.

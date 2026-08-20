@@ -37,4 +37,7 @@ RUN npm install -g @anthropic-ai/claude-code
 # Copy source code
 COPY . .
 
+# Headful unter virtuellem Display (Xvfb) für Anti-Detection.
+RUN chmod +x /app/docker-entrypoint.sh
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["npx", "tsx", "apps/worker/src/index.ts"]
