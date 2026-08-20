@@ -1,4 +1,4 @@
-import { Project, Agent, Run, Result, CreateProject, UpdateProject, CreateAgent, UpdateAgent, RecorderSession } from '@checky/shared';
+import { Project, Agent, Run, Result, CreateProject, UpdateProject, CreateAgent, UpdateAgent, RecorderSession, AppSettings, UpdateSettings } from '@checky/shared';
 
 const baseUrl = '/api';
 
@@ -54,4 +54,9 @@ export const api = {
   getRecorder: (sid: string) => fetcher<RecorderSession>(`/recorder/${sid}`),
   confirmRecorder: (sid: string) => fetcher<{ version: number }>(`/recorder/${sid}/confirm`, { method: 'POST' }),
   abortRecorder: (sid: string) => fetcher<RecorderSession>(`/recorder/${sid}/abort`, { method: 'POST' }),
+
+  // Settings
+  getSettings: () => fetcher<AppSettings>('/settings'),
+  updateSettings: (data: UpdateSettings) => fetcher<AppSettings>('/settings', { method: 'PUT', body: JSON.stringify(data) }),
+  runCleanup: () => fetcher<{ ok: boolean }>('/admin/cleanup', { method: 'POST' }),
 };

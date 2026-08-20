@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import { executeRecipe } from './executor.js';
 import { ClaudeAgentProvider } from './aiProvider.js';
 import { runRecorderSession } from './recorder.js';
+import { enqueueNotification, processOutbox, runCleanup } from './notify.js';
 
 const dbUrl = process.env.DB_URL;
 // KI nur aktiv, wenn ein Abo-Token vorhanden ist (sonst kein Self-Healing -> Run failt sauber).
@@ -33,6 +34,19 @@ async function start() {
   await boss.work('recorder', { batchSize: 1 }, async (jobs: any[]) => {
     for (const job of jobs) await handleRecorderJob(job);
   });
+
+  // Cleanup-Queue: manueller Trigger + täglicher Cron.
+  await boss.createQueue('cleanup').catch(() => {});
+  await boss.work('cleanup', async (jobs: any[]) => {
+    for (const _ of jobs) {
+      const r = await runCleanup(pool!);
+      console.log(`[Worker] Cleanup: ${r.deletedRuns} Läufe, ${r.deletedFiles} Screenshots gelöscht`);
+    }
+  });
+  await boss.schedule('cleanup', '0 3 * * *', {}, { tz: 'UTC' }).catch(() => {});
+
+  // Outbox-Processor: fällige Benachrichtigungen zustellen (alle 10s).
+  setInterval(() => { processOutbox(pool!).catch(err => console.error('[Worker] Outbox-Fehler:', err)); }, 10000);
 
   // pg-boss v12: Queues müssen existieren, Wildcard-work gibt es nicht.
   // -> Pro Agent eine Queue mit eigenem Worker, registriert in updateSchedules().
@@ -91,6 +105,27 @@ async function updateSchedules() {
     }
   } catch (error) {
     console.error('[Worker] Error updating schedules:', error);
+  }
+}
+
+async function sendRunNotification(agent: any, run_id: string, status: string, changed: boolean, data: any, error?: string) {
+  try {
+    if (agent.notify && agent.notify.enabled === false) return; // pro Agent abschaltbar
+    const { rows } = await pool!.query('SELECT name FROM projects WHERE id = $1', [agent.project_id]);
+    const base = process.env.PUBLIC_URL || 'http://localhost:8081';
+    await enqueueNotification(pool!, {
+      agent: agent.name,
+      agent_id: agent.id,
+      project: rows[0]?.name || null,
+      status,
+      changed,
+      data: data ?? null,
+      error: error ?? null,
+      run_id,
+      link: `${base}/runs`,
+    });
+  } catch (e) {
+    console.error('[Worker] Notify-Enqueue-Fehler:', e);
   }
 }
 
@@ -153,7 +188,8 @@ async function handleJob(job: any) {
       await pool!.query(`UPDATE runs SET status = 'failed', finished_at = NOW(), error = $1, steps_log = $2, screenshot_before = $3, screenshot_after = $4, ai_tokens = $5 WHERE id = $6`,
         [runResult.error, JSON.stringify(runResult.stepsLog), runResult.screenshotBefore, runResult.screenshotAfter, runResult.aiTokens || 0, run_id]
       );
-      return; // End here but do not throw to pg-boss, or throw if we want retry? 
+      await sendRunNotification(agent, run_id, 'failed', false, null, runResult.error);
+      return; // End here but do not throw to pg-boss, or throw if we want retry?
       // If we want retry, we should throw. But we want to record the screenshots and logs.
       // throw new Error(runResult.error);
     }
@@ -194,10 +230,14 @@ async function handleJob(job: any) {
       [finalStatus, JSON.stringify(runResult.stepsLog), runResult.screenshotBefore, runResult.screenshotAfter, runResult.aiTokens || 0, run_id]
     );
     console.log(`[Worker] Run ${run_id} ${finalStatus}. Changed: ${changed}. AI-Tokens: ${runResult.aiTokens || 0}`);
-    
+
+    // Benachrichtigung nur bei Änderung.
+    if (changed) await sendRunNotification(agent, run_id, finalStatus, true, runResult.resultData);
+
   } catch (error) {
     console.error(`[Worker] Run ${run_id} failed:`, error);
     await pool!.query(`UPDATE runs SET status = 'failed', finished_at = NOW(), error = $1 WHERE id = $2`, [String(error), run_id]);
+    await sendRunNotification(agent, run_id, 'failed', false, null, String(error));
     throw error; // Rethrow to let pg-boss handle retries
   }
 }

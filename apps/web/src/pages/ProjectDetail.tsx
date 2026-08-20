@@ -28,7 +28,8 @@ export default function ProjectDetail() {
 
   const triggerMutation = useMutation({
     mutationFn: (id: string) => api.triggerAgentRun(id),
-    onSuccess: () => alert('Run queued!')
+    onSuccess: () => alert('Run eingereiht!'),
+    onError: (e) => alert((e as Error).message)
   });
 
   const error = projectError || agentsError;

@@ -1,6 +1,6 @@
 import express, { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { CreateProjectSchema, UpdateProjectSchema, CreateAgentSchema, UpdateAgentSchema } from '@checky/shared';
+import { CreateProjectSchema, UpdateProjectSchema, CreateAgentSchema, UpdateAgentSchema, UpdateSettingsSchema } from '@checky/shared';
 import { query } from './db.js';
 // @ts-ignore
 import { PgBoss } from 'pg-boss';
@@ -211,8 +211,14 @@ app.post('/api/agents/:id/trigger', asyncHandler(async (req, res) => {
   const agent = await query('SELECT id FROM agents WHERE id = $1', [id]);
   if (agent.rowCount === 0) return res.status(404).json({ error: 'Agent not found' });
 
+  // Kill-Switch: bei globaler Pause keine manuelle Ausführung.
+  const paused = await query(`SELECT value FROM settings WHERE key = 'paused'`);
+  if (paused.rows[0]?.value === true) {
+    return res.status(423).json({ error: 'Kill-Switch ist aktiv – Ausführung global pausiert.' });
+  }
+
   const result = await query(`INSERT INTO runs (agent_id, status) VALUES ($1, 'queued') RETURNING *`, [id]);
-  
+
   // Push to pg-boss (pg-boss v12: Queue muss existieren, bevor gesendet wird)
   if (boss) {
     const queueName = `agent-run-${id}`;
@@ -287,6 +293,42 @@ app.post('/api/recorder/:sid/confirm', asyncHandler(async (req, res) => {
   );
   await query(`UPDATE recorder_sessions SET status='completed', updated_at=NOW() WHERE id=$1`, [sid]);
   res.status(201).json({ recipe: rec.rows[0], version });
+}));
+
+// --- Settings & Admin (Schritt 21) -------------------------------------------
+
+async function readSettings() {
+  const { rows } = await query('SELECT key, value FROM settings');
+  const map: Record<string, any> = {};
+  for (const r of rows) map[r.key] = r.value;
+  return {
+    paused: map.paused === true,
+    retention_days: typeof map.retention_days === 'number' ? map.retention_days : 30,
+    notify: (map.notify && typeof map.notify === 'object') ? map.notify : {},
+  };
+}
+
+app.get('/api/settings', asyncHandler(async (req, res) => {
+  res.json(await readSettings());
+}));
+
+app.put('/api/settings', asyncHandler(async (req, res) => {
+  const data = UpdateSettingsSchema.parse(req.body);
+  for (const [k, v] of Object.entries(data)) {
+    await query(
+      `INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2`,
+      [k, JSON.stringify(v)]
+    );
+  }
+  res.json(await readSettings());
+}));
+
+app.post('/api/admin/cleanup', asyncHandler(async (req, res) => {
+  if (boss) {
+    try { await boss.createQueue('cleanup'); } catch { /* existiert bereits */ }
+    await boss.send('cleanup', {});
+  }
+  res.json({ ok: true, queued: !!boss });
 }));
 
 app.use((err: Error, req: Request, res: Response, next: NextFunction) => {

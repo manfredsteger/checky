@@ -163,3 +163,29 @@ export const RecorderSessionSchema = z.object({
   updated_at: z.coerce.date().optional(),
 });
 export type RecorderSession = z.infer<typeof RecorderSessionSchema>;
+
+// --- Settings & Notify (Schritt 21) ------------------------------------------
+
+export const NotifyConfigSchema = z.object({
+  webhook_url: z.string().optional(),          // generischer Webhook (POST JSON)
+  matrix_homeserver: z.string().optional(),    // z.B. https://matrix.org
+  matrix_token: z.string().optional(),
+  matrix_room: z.string().optional(),          // !roomid:server
+});
+export type NotifyConfig = z.infer<typeof NotifyConfigSchema>;
+
+export const AppSettingsSchema = z.object({
+  paused: z.boolean().default(false),
+  retention_days: z.number().int().min(0).default(30),
+  notify: NotifyConfigSchema.default({}),
+});
+export type AppSettings = z.infer<typeof AppSettingsSchema>;
+
+// WICHTIG: ohne .default(), damit ein Teil-Update weggelassene Keys NICHT
+// mit Defaults überschreibt (sonst löscht z.B. ein paused-Toggle die notify-Config).
+export const UpdateSettingsSchema = z.object({
+  paused: z.boolean().optional(),
+  retention_days: z.number().int().min(0).optional(),
+  notify: NotifyConfigSchema.optional(),
+});
+export type UpdateSettings = z.infer<typeof UpdateSettingsSchema>;
