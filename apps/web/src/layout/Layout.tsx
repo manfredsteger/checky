@@ -1,7 +1,7 @@
 import { Link, Outlet, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
-import { Box, PlaySquare, Plus } from 'lucide-react';
+import { Box, PlaySquare, Plus, Settings } from 'lucide-react';
 
 export default function Layout() {
   const { data: projects } = useQuery({ queryKey: ['projects'], queryFn: api.getProjects });
@@ -42,6 +42,13 @@ export default function Layout() {
               >
                 <PlaySquare className="w-4 h-4 text-slate-400" />
                 <span className={`text-sm font-medium`}>All Runs</span>
+              </Link>
+             <Link
+                to="/settings"
+                className={`px-6 py-3 flex items-center gap-2 cursor-pointer transition-colors hover:bg-[#111827] border-l-4 border-transparent`}
+              >
+                <Settings className="w-4 h-4 text-slate-400" />
+                <span className={`text-sm font-medium`}>Einstellungen</span>
               </Link>
           </div>
         </nav>
