@@ -12,39 +12,69 @@ async function runSeed() {
   await client.connect();
 
   try {
-    console.log('Clearing existing data (Cascade deletes agents, etc.)...');
+    console.log('[Seed] Clearing existing data (Cascade deletes agents, recipes, runs, results)...');
     await client.query('DELETE FROM projects');
 
-    console.log('Inserting Demo Project...');
-    const projRes = await client.query(`
-      INSERT INTO projects (name, description)
-      VALUES ('Demo', 'Demo project for Checky')
-      RETURNING id;
-    `);
+    console.log('[Seed] Inserting Demo project...');
+    const projRes = await client.query(
+      `INSERT INTO projects (name, description) VALUES ($1, $2) RETURNING id`,
+      ['Demo', 'Demo-Projekt für Checky']
+    );
     const projectId = projRes.rows[0].id;
 
-    console.log('Inserting Bücher-Preis-Check Agent...');
+    console.log('[Seed] Inserting Bücher-Preis-Check agent...');
     const resultSchema = {
-      title: "string",
-      price: "string",
-      availability: "string"
+      type: 'object',
+      properties: {
+        title: { type: 'string' },
+        price: { type: 'string' },
+        availability: { type: 'string' },
+      },
     };
 
-    await client.query(`
-      INSERT INTO agents (project_id, name, site, goal_text, schedule_cron, result_schema)
-      VALUES ($1, $2, $3, $4, $5, $6)
-    `, [
-      projectId,
-      'Bücher-Preis-Check',
-      'https://books.toscrape.com',
-      'Finde das Buch ‚A Light in the Attic\' und lies Preis und Verfügbarkeit aus',
-      '0 8 * * *',
-      JSON.stringify(resultSchema)
-    ]);
+    const agentRes = await client.query(
+      `INSERT INTO agents (project_id, name, site, goal_text, params, schedule_cron, result_schema)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+      [
+        projectId,
+        'Bücher-Preis-Check',
+        'https://books.toscrape.com',
+        "Finde das Buch ‚A Light in the Attic' und lies Preis und Verfügbarkeit aus",
+        JSON.stringify({ book_title: 'A Light in the Attic' }),
+        '0 8 * * *',
+        JSON.stringify(resultSchema),
+      ]
+    );
+    const agentId = agentRes.rows[0].id;
 
-    console.log('Seeding completed successfully!');
+    console.log('[Seed] Inserting Recipe v1 (deterministischer Regelbetrieb)...');
+    const recipeSteps = [
+      {
+        action: 'goto',
+        url: 'https://books.toscrape.com/catalogue/a-light-in-the-attic_1000/index.html',
+      },
+      { action: 'waitFor', selector: 'div.product_main' },
+      {
+        action: 'extract',
+        mode: 'dom_map',
+        map: {
+          title: '.product_main h1',
+          price: '.product_main p.price_color',
+          availability: '.product_main p.availability',
+        },
+      },
+    ];
+
+    await client.query(
+      `INSERT INTO recipes (agent_id, version, steps) VALUES ($1, $2, $3)`,
+      [agentId, 1, JSON.stringify(recipeSteps)]
+    );
+
+    console.log('[Seed] Seeding completed successfully.');
+    console.log(`[Seed] Project ID: ${projectId}`);
+    console.log(`[Seed] Agent ID:   ${agentId}`);
   } catch (e) {
-    console.error('Seeding failed:', e);
+    console.error('[Seed] Seeding failed:', e);
     process.exit(1);
   } finally {
     await client.end();

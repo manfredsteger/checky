@@ -1,3 +1,5 @@
+-- Up Migration
+
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 CREATE TABLE projects (
@@ -58,3 +60,12 @@ CREATE TABLE results (
     changed BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Down Migration
+
+DROP TABLE results;
+DROP TABLE runs;
+DROP TYPE run_status;
+DROP TABLE recipes;
+DROP TABLE agents;
+DROP TABLE projects;

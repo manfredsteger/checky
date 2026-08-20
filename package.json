@@ -12,11 +12,10 @@
     "dev:api": "tsx apps/api/src/index.ts",
     "dev:web": "npm run dev --workspace=@checky/web",
     "build": "npm run build --workspace=@checky/web",
+    "test": "npm run test --workspaces --if-present",
     "clean": "rm -rf dist server.js apps/*/dist"
   },
   "dependencies": {
-    "@checky/shared": "workspace:*",
-    "@google/genai": "^2.4.0",
     "@tailwindcss/vite": "^4.1.14",
     "@tanstack/react-query": "^5.101.4",
     "@vitejs/plugin-react": "^5.0.4",

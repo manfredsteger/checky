@@ -6,12 +6,13 @@
   "type": "module",
   "scripts": {
     "dev": "tsx src/index.ts",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "test": "vitest run"
   },
   "dependencies": {
-    "@checky/shared": "workspace:*",
+    "@checky/shared": "*",
     "pg": "^8.13.1",
-    "pg-boss": "^10.1.4",
+    "pg-boss": "^12.27.0",
     "playwright": "^1.62.1",
     "zod": "^4.4.3"
   },

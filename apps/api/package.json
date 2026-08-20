@@ -9,6 +9,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@checky/shared": "*",
     "@electric-sql/pglite": "^0.5.5",
     "express": "^4.21.2",
     "node-pg-migrate": "^7.9.0",

@@ -17,12 +17,12 @@ export const AgentSchema = z.object({
   name: z.string().min(1),
   site: z.string().url(),
   goal_text: z.string().min(1),
-  params: z.record(z.any()).nullable().default({}),
+  params: z.record(z.string(), z.any()).nullable().default({}),
   schedule_cron: z.string().min(1),
   jitter_min: z.number().int().default(0),
   enabled: z.boolean().default(true),
-  notify: z.record(z.any()).nullable().default({}),
-  result_schema: z.record(z.any()).nullable().default({}),
+  notify: z.record(z.string(), z.any()).nullable().default({}),
+  result_schema: z.record(z.string(), z.any()).nullable().default({}),
   created_at: z.coerce.date(),
 });
 export type Agent = z.infer<typeof AgentSchema>;
@@ -57,7 +57,7 @@ export const ResultSchema = z.object({
   id: z.string().uuid(),
   run_id: z.string().uuid(),
   agent_id: z.string().uuid(),
-  data: z.record(z.any()),
+  data: z.record(z.string(), z.any()),
   data_hash: z.string(),
   changed: z.boolean(),
   created_at: z.coerce.date(),
@@ -103,7 +103,7 @@ export function jsonSchemaToZod(schema: any): z.ZodTypeAny {
         }
         return z.object(shape);
       }
-      return z.record(z.any());
+      return z.record(z.string(), z.any());
     case 'array':
       if (schema.items) {
         return z.array(jsonSchemaToZod(schema.items));
