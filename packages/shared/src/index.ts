@@ -114,3 +114,23 @@ export function jsonSchemaToZod(schema: any): z.ZodTypeAny {
   }
 }
 
+
+// --- AIProvider (Schritt 17): KI nur zum Selbstheilen + JSON-Fallback ---------
+
+// Antwort des Selektor-Reparateurs: ein Playwright-Locator-String in unserer DSL
+// (getByRole(...) / getByLabel(...) / CSS), den getLocator() im Executor parst.
+export const HealResponseSchema = z.object({
+  locator: z.string().min(1),
+});
+export type HealResponse = z.infer<typeof HealResponseSchema>;
+
+// Ergebnis eines KI-Aufrufs inkl. verbrauchter Tokens (für runs.ai_tokens).
+export interface HealResult { locator: string; tokens: number; }
+export interface ExtractResult { data: unknown; tokens: number; }
+
+export interface AIProvider {
+  // Repariert einen gebrochenen Selektor anhand eines ARIA-Snapshots der Seite.
+  healSelector(failedStep: unknown, ariaSnapshot: string): Promise<HealResult>;
+  // Extrahiert strukturierte Daten aus dem Seitentext gemäß JSON-Schema (Fallback).
+  extractJson(pageText: string, jsonSchema: unknown): Promise<ExtractResult>;
+}

@@ -2,8 +2,11 @@ import { PgBoss } from 'pg-boss';
 import pg from 'pg';
 import crypto from 'crypto';
 import { executeRecipe } from './executor.js';
+import { ClaudeAgentProvider } from './aiProvider.js';
 
 const dbUrl = process.env.DB_URL;
+// KI nur aktiv, wenn ein Abo-Token vorhanden ist (sonst kein Self-Healing -> Run failt sauber).
+const aiProvider = process.env.CLAUDE_CODE_OAUTH_TOKEN ? new ClaudeAgentProvider() : undefined;
 let pool: pg.Pool | null = null;
 let boss: PgBoss | null = null;
 
@@ -135,13 +138,13 @@ async function handleJob(job: any) {
     // Update run with recipe_id
     await pool!.query(`UPDATE runs SET recipe_id = $1 WHERE id = $2`, [recipe.id, run_id]);
 
-    // 6. Playwright Executor
-    const runResult = await executeRecipe(agent, recipe, run_id);
-    
+    // 6. Playwright Executor (mit optionalem KI-Provider für Self-Healing/ai_json)
+    const runResult = await executeRecipe(agent, recipe, run_id, aiProvider);
+
     if (runResult.error) {
       console.error(`[Worker] Executor failed for run ${run_id}:`, runResult.error);
-      await pool!.query(`UPDATE runs SET status = 'failed', finished_at = NOW(), error = $1, steps_log = $2, screenshot_before = $3, screenshot_after = $4 WHERE id = $5`, 
-        [runResult.error, JSON.stringify(runResult.stepsLog), runResult.screenshotBefore, runResult.screenshotAfter, run_id]
+      await pool!.query(`UPDATE runs SET status = 'failed', finished_at = NOW(), error = $1, steps_log = $2, screenshot_before = $3, screenshot_after = $4, ai_tokens = $5 WHERE id = $6`,
+        [runResult.error, JSON.stringify(runResult.stepsLog), runResult.screenshotBefore, runResult.screenshotAfter, runResult.aiTokens || 0, run_id]
       );
       return; // End here but do not throw to pg-boss, or throw if we want retry? 
       // If we want retry, we should throw. But we want to record the screenshots and logs.
@@ -165,11 +168,25 @@ async function handleJob(job: any) {
       [run_id, agent_id, JSON.stringify(runResult.resultData), data_hash, changed]
     );
 
-    // 9. Update run
-    await pool!.query(`UPDATE runs SET status = 'succeeded', finished_at = NOW(), steps_log = $1, screenshot_before = $2, screenshot_after = $3 WHERE id = $4`, 
-      [JSON.stringify(runResult.stepsLog), runResult.screenshotBefore, runResult.screenshotAfter, run_id]
+    // 9. Self-Healing: bei repariertem Selektor neue Recipe-Version speichern
+    let finalStatus: 'succeeded' | 'healed' = 'succeeded';
+    if (runResult.healed && runResult.newSteps) {
+      const { rows: vRows } = await pool!.query(
+        'SELECT COALESCE(MAX(version), 0) + 1 AS next FROM recipes WHERE agent_id = $1', [agent_id]
+      );
+      await pool!.query(
+        'INSERT INTO recipes (agent_id, version, steps, healed_from) VALUES ($1, $2, $3, $4)',
+        [agent_id, vRows[0].next, JSON.stringify(runResult.newSteps), recipe.id]
+      );
+      finalStatus = 'healed';
+      console.log(`[Worker] Run ${run_id} healed -> neue Recipe-Version v${vRows[0].next} (healed_from ${recipe.id})`);
+    }
+
+    // 10. Update run
+    await pool!.query(`UPDATE runs SET status = $1, finished_at = NOW(), steps_log = $2, screenshot_before = $3, screenshot_after = $4, ai_tokens = $5 WHERE id = $6`,
+      [finalStatus, JSON.stringify(runResult.stepsLog), runResult.screenshotBefore, runResult.screenshotAfter, runResult.aiTokens || 0, run_id]
     );
-    console.log(`[Worker] Run ${run_id} succeeded. Changed: ${changed}`);
+    console.log(`[Worker] Run ${run_id} ${finalStatus}. Changed: ${changed}. AI-Tokens: ${runResult.aiTokens || 0}`);
     
   } catch (error) {
     console.error(`[Worker] Run ${run_id} failed:`, error);

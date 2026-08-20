@@ -1,7 +1,7 @@
 import { chromium, Browser, BrowserContext, Page, Locator } from 'playwright';
 import path from 'path';
 import fs from 'fs';
-import { jsonSchemaToZod } from '@checky/shared';
+import { jsonSchemaToZod, type AIProvider } from '@checky/shared';
 
 export interface Step {
   action: 'goto' | 'click' | 'fill' | 'select' | 'waitFor' | 'extract';
@@ -10,8 +10,8 @@ export interface Step {
   value?: string;
   optional?: boolean;
   note?: string;
-  mode?: 'dom_map';
-  fallback?: string;
+  mode?: 'dom_map' | 'ai_json';
+  fallback?: 'ai_json' | string;
   map?: Record<string, string>;
 }
 
@@ -26,6 +26,9 @@ export interface RunResult {
   error?: string;
   screenshotBefore?: string;
   screenshotAfter?: string;
+  healed?: boolean;       // true, wenn ein Selektor per KI repariert wurde
+  newSteps?: Step[];      // reparierte Steps (für neue Recipe-Version)
+  aiTokens?: number;      // in diesem Run verbrauchte KI-Tokens
 }
 
 // Subsitute parameters in text: {{key}} -> value
@@ -99,10 +102,15 @@ async function checkGuardrails(locator: Locator, action: string) {
 export async function executeRecipe(
   agent: { site: string, params: Record<string, any>, result_schema?: any },
   recipe: Recipe,
-  runId: string
+  runId: string,
+  aiProvider?: AIProvider
 ): Promise<RunResult> {
   const resultData: Record<string, any> = {};
   const stepsLog: any[] = [];
+  // Arbeitskopie der Steps – wird bei Selbstheilung angepasst (Original bleibt unangetastet)
+  const workingSteps: Step[] = JSON.parse(JSON.stringify(recipe.steps));
+  let aiTokens = 0;
+  let healed = false;
   
   const screenshotsDir = process.env.SCREENSHOT_DIR || path.join(process.cwd(), 'data', 'screenshots');
   if (!fs.existsSync(screenshotsDir)) {
@@ -142,56 +150,100 @@ export async function executeRecipe(
       }
     });
 
+    // KI-Fallback: Haupttext der Seite (max 15k Zeichen) -> extractJson gegen result_schema.
+    const runAiJson = async () => {
+      if (!aiProvider) throw new Error('ai_json Fallback angefordert, aber kein AIProvider konfiguriert');
+      const text = (await page!.locator('body').innerText()).slice(0, 15000);
+      const r = await aiProvider.extractJson(text, agent.result_schema ?? {});
+      aiTokens += r.tokens;
+      const parsed = jsonSchemaToZod(agent.result_schema).safeParse(r.data);
+      if (!parsed.success) {
+        throw new Error('ai_json Ergebnis passt nicht zum result_schema: ' + parsed.error.issues.map(e => `${e.path.join('.')}: ${e.message}`).join(', '));
+      }
+      Object.assign(resultData, parsed.data as Record<string, any>);
+    };
+
+    // Extraktion: dom_map (mit optionalem ai_json-Fallback) oder direkt ai_json.
+    const runExtract = async (step: Step) => {
+      if (step.mode === 'dom_map' && step.map) {
+        try {
+          for (const [field, sel] of Object.entries(step.map)) {
+            const loc = getLocator(page!, substitute(sel as string, agent.params));
+            resultData[field] = (await loc.textContent())?.trim() || null;
+          }
+        } catch (e) {
+          if (step.fallback === 'ai_json' && aiProvider) await runAiJson();
+          else throw e;
+        }
+      } else if (step.mode === 'ai_json' && aiProvider) {
+        await runAiJson();
+      }
+    };
+
+    // Führt die eigentliche Aktion eines Steps aus ({{param}} auch in Selektoren).
+    const runAction = async (step: Step) => {
+      if (step.action === 'goto' && step.url) {
+        await page!.goto(substitute(step.url, agent.params), { waitUntil: 'domcontentloaded' });
+      } else if (step.action === 'click' && step.selector) {
+        const loc = getLocator(page!, substitute(step.selector, agent.params));
+        await checkGuardrails(loc, 'click');
+        await loc.click();
+      } else if (step.action === 'fill' && step.selector && step.value !== undefined) {
+        const loc = getLocator(page!, substitute(step.selector, agent.params));
+        await checkGuardrails(loc, 'fill');
+        await loc.fill(substitute(step.value, agent.params));
+      } else if (step.action === 'waitFor' && step.selector) {
+        await getLocator(page!, substitute(step.selector, agent.params)).waitFor({ state: 'visible' });
+      } else if (step.action === 'extract') {
+        await runExtract(step);
+      }
+    };
+
     let takenBeforeScreenshot = false;
 
-    for (let i = 0; i < recipe.steps.length; i++) {
-      const step = recipe.steps[i];
+    for (let i = 0; i < workingSteps.length; i++) {
+      const step = workingSteps[i];
       const startTimer = Date.now();
       let stepError: string | null = null;
+      let stepHealed = false;
 
       try {
-        // Take "before" screenshot right before the last interaction/extraction step
-        if (i === recipe.steps.length - 1 && !takenBeforeScreenshot) {
+        // "before"-Screenshot direkt vor dem letzten Schritt
+        if (i === workingSteps.length - 1 && !takenBeforeScreenshot) {
           await page.screenshot({ path: screenshotBeforePath });
           takenBeforeScreenshot = true;
         }
 
-        if (step.action === 'goto' && step.url) {
-          const finalUrl = substitute(step.url, agent.params);
-          await page.goto(finalUrl, { waitUntil: 'domcontentloaded' });
-        } 
-        else if (step.action === 'click' && step.selector) {
-          const loc = getLocator(page, step.selector);
-          await checkGuardrails(loc, 'click');
-          await loc.click();
-        } 
-        else if (step.action === 'fill' && step.selector && step.value !== undefined) {
-          const loc = getLocator(page, step.selector);
-          await checkGuardrails(loc, 'fill');
-          await loc.fill(substitute(step.value, agent.params));
-        } 
-        else if (step.action === 'waitFor' && step.selector) {
-          const loc = getLocator(page, step.selector);
-          await loc.waitFor({ state: 'visible' });
-        } 
-        else if (step.action === 'extract' && step.mode === 'dom_map' && step.map) {
-          for (const [field, sel] of Object.entries(step.map)) {
-            const loc = getLocator(page, sel as string);
-            resultData[field] = (await loc.textContent())?.trim() || null;
+        try {
+          await runAction(step);
+        } catch (err: any) {
+          // Selbstheilung: max. 1x pro Run, nur für einzelne Selektor-Schritte
+          const isSelectorStep = step.action === 'click' || step.action === 'fill' || step.action === 'waitFor';
+          if (aiProvider && !healed && isSelectorStep && step.selector) {
+            const aria = await page.locator('body').ariaSnapshot();
+            const heal = await aiProvider.healSelector(step, aria);
+            aiTokens += heal.tokens;
+            const healedStep: Step = { ...step, selector: heal.locator };
+            await runAction(healedStep);   // neuen Locator testen: Aktion erneut ausführen
+            workingSteps[i] = healedStep;  // fließt in neue Recipe-Version ein
+            healed = true;
+            stepHealed = true;
+          } else {
+            throw err;
           }
         }
       } catch (err: any) {
         stepError = err.message || String(err);
         if (!step.optional) throw err;
       } finally {
-        stepsLog.push({ step, duration: Date.now() - startTimer, error: stepError });
+        stepsLog.push({ step: workingSteps[i], duration: Date.now() - startTimer, error: stepError, healed: stepHealed });
       }
     }
 
-    // Take "after" screenshot
+    // "after"-Screenshot
     await page.screenshot({ path: screenshotAfterPath });
-    
-    // Optional schema validation
+
+    // Ergebnis gegen result_schema validieren
     if (agent.result_schema) {
       const zodSchema = jsonSchemaToZod(agent.result_schema);
       const parsed = zodSchema.safeParse(resultData);
@@ -203,6 +255,9 @@ export async function executeRecipe(
     return {
       resultData,
       stepsLog,
+      healed,
+      newSteps: healed ? workingSteps : undefined,
+      aiTokens,
       screenshotBefore: `/data/screenshots/${runId}-before.png`,
       screenshotAfter: `/data/screenshots/${runId}-after.png`
     };
