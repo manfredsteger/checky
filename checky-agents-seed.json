@@ -1,0 +1,167 @@
+{
+  "project": {
+    "name": "Flugsuche 2027 Mai Japan",
+    "description": "Preis-/Verfügbarkeitsbeobachtung Familienflug Deutschland↔Japan, Mai 2027. Quellen aus der Flight-Tracker-Übergabe (20.08.2026). Agenten sind deaktiviert angelegt: pro Quelle einmal per Recorder anlernen, dann aktivieren."
+  },
+  "defaults": {
+    "params": {
+      "origin": "MUC",
+      "dest_tokyo": "HND",
+      "dest_osaka": "KIX",
+      "outbound": "2027-05-10",
+      "inbound": "2027-05-24",
+      "adults": "2",
+      "children": "2",
+      "cabin": "economy"
+    },
+    "result_schema": {
+      "type": "object",
+      "properties": {
+        "price": { "type": "string" },
+        "currency": { "type": "string" },
+        "airline": { "type": "string" },
+        "stops": { "type": "string" },
+        "duration": { "type": "string" },
+        "note": { "type": "string" }
+      }
+    }
+  },
+  "agents": [
+    {
+      "name": "Lufthansa Gabelflug (Multi-City)",
+      "site": "https://www.lufthansa.com",
+      "goal_text": "Gabelflug in der Buchungsmaske: Hinflug {{origin}}→{{dest_osaka}} am {{outbound}}, Rückflug {{dest_tokyo}}→{{origin}} am {{inbound}}, {{adults}} Erwachsene + {{children}} Kinder, Klasse {{cabin}}. Gesamtpreis der günstigsten Verbindung auslesen.",
+      "schedule_cron": "0 7 * * *",
+      "priority": 1,
+      "note": "Wichtigster Kandidat: JS-Buchungsmaske, per WebFetch nie erreichbar. Echter Gabelflug-Preis."
+    },
+    {
+      "name": "idealo Flug MUC→Tokio",
+      "site": "https://www.idealo.de",
+      "goal_text": "Hin- und Rückflug {{origin}}→{{dest_tokyo}} im Mai 2027 (Hin {{outbound}}, Rück {{inbound}}), günstigsten Gesamtpreis + Airline auslesen.",
+      "schedule_cron": "30 7 * * *",
+      "priority": 2,
+      "note": "War nur durch Claude-Freigabesperre (PROVENANCE_REQUIRED) blockiert – mit echtem Browser vermutlich sofort nutzbar."
+    },
+    {
+      "name": "billigflieger.de MUC→Tokio",
+      "site": "https://www.billigflieger.de",
+      "goal_text": "Hin-/Rückflug {{origin}}→{{dest_tokyo}} Mai 2027 ({{outbound}} / {{inbound}}), günstigster Preis + Airline.",
+      "schedule_cron": "0 8 * * *",
+      "priority": 2,
+      "note": "PROVENANCE_REQUIRED – guter Browser-Kandidat."
+    },
+    {
+      "name": "wingie.com MUC→Tokio",
+      "site": "https://www.wingie.com",
+      "goal_text": "Round-trip {{origin}}→{{dest_tokyo}} May 2027, cheapest price + airline.",
+      "schedule_cron": "0 9 * * 1",
+      "priority": 2,
+      "note": "PROVENANCE_REQUIRED – Browser-Kandidat."
+    },
+    {
+      "name": "ab-in-den-urlaub.de MUC→Tokio",
+      "site": "https://www.ab-in-den-urlaub.de",
+      "goal_text": "Flug {{origin}}→{{dest_tokyo}} Mai 2027, günstigster Preis.",
+      "schedule_cron": "0 9 * * 4",
+      "priority": 2,
+      "note": "WebFetch: 403 (User-Agent-Check) – mit echtem Browser testen."
+    },
+    {
+      "name": "Google Flights MUC→Tokio",
+      "site": "https://www.google.com/travel/flights",
+      "goal_text": "Round-trip {{origin}}→{{dest_tokyo}}, Hin {{outbound}} / Rück {{inbound}}, günstigster Preis + Airline + Umstiege.",
+      "schedule_cron": "0 7 * * 1,4",
+      "priority": 3,
+      "note": "robots.txt-Block bei WebFetch; mit Playwright ungewiss, aber hoher Wert."
+    },
+    {
+      "name": "Skyscanner MUC→Tokio",
+      "site": "https://www.skyscanner.de",
+      "goal_text": "Hin-/Rückflug {{origin}}→{{dest_tokyo}} Mai 2027, günstigster Preis + Airline.",
+      "schedule_cron": "30 7 * * 1,4",
+      "priority": 3,
+      "note": "robots.txt; mit echtem Browser testen."
+    },
+    {
+      "name": "Kayak MUC→Tokio",
+      "site": "https://www.kayak.de",
+      "goal_text": "Round-trip {{origin}}→{{dest_tokyo}} Mai 2027, günstigster Preis + Airline.",
+      "schedule_cron": "0 8 * * 1,4",
+      "priority": 3,
+      "note": "robots.txt; mit echtem Browser testen."
+    },
+    {
+      "name": "Momondo MUC→Tokio",
+      "site": "https://www.momondo.de",
+      "goal_text": "Hin-/Rückflug {{origin}}→{{dest_tokyo}} Mai 2027, günstigster Preis.",
+      "schedule_cron": "0 8 * * 1",
+      "priority": 3,
+      "note": "robots.txt; mit echtem Browser testen."
+    },
+    {
+      "name": "kiwi.com Website MUC→Tokio",
+      "site": "https://www.kiwi.com",
+      "goal_text": "Round-trip {{origin}}→{{dest_tokyo}} May 2027, cheapest bookable price. Browser-Gegencheck zum Kiwi-MCP-Connector.",
+      "schedule_cron": "0 10 * * 1",
+      "priority": 4,
+      "note": "Redundanz/Fallback zum MCP-Connector."
+    },
+    {
+      "name": "Check24 Flug MUC→Tokio",
+      "site": "https://flug.check24.de",
+      "goal_text": "Hin-/Rückflug {{origin}}→{{dest_tokyo}} Mai 2027, günstigster Preis + Saisonalität.",
+      "schedule_cron": "0 9 * * 1",
+      "priority": 3,
+      "note": "WebFetch lieferte nur Monats-Übersicht; Browser für Tagespreise."
+    },
+    {
+      "name": "SWOODOO MUC→Tokio/Osaka",
+      "site": "https://www.swoodoo.com",
+      "goal_text": "Hin-/Rückflug {{origin}}→{{dest_tokyo}} (und optional {{dest_osaka}}) Mai 2027, günstigster Preis inkl. Familientarif.",
+      "schedule_cron": "30 9 * * 1",
+      "priority": 3,
+      "note": "WebFetch nur 'ab'-Werte; Browser für konkrete Termine/Familientarife."
+    },
+    {
+      "name": "Opodo MUC→Tokio",
+      "site": "https://www.opodo.de",
+      "goal_text": "Hin-/Rückflug {{origin}}→{{dest_tokyo}} Mai 2027, günstigster Preis.",
+      "schedule_cron": "0 10 * * 1",
+      "priority": 3,
+      "note": "WebFetch nur ~20 Tage Vorlauf; Browser für Mai 2027."
+    },
+    {
+      "name": "eDreams MUC→Tokio",
+      "site": "https://www.edreams.de",
+      "goal_text": "Round-trip {{origin}}→{{dest_tokyo}} Mai 2027, günstigster Preis.",
+      "schedule_cron": "30 10 * * 1",
+      "priority": 3,
+      "note": "WebFetch nur Kurzfrist; Browser für Mai 2027."
+    },
+    {
+      "name": "fluege.de MUC→Tokio",
+      "site": "https://www.fluege.de",
+      "goal_text": "Hin-/Rückflug {{origin}}→{{dest_tokyo}} Mai 2027, günstigster Preis.",
+      "schedule_cron": "0 11 * * 1",
+      "priority": 3,
+      "note": "WebFetch nur Kurzfrist."
+    },
+    {
+      "name": "lastminute.de Japan",
+      "site": "https://www.lastminute.de",
+      "goal_text": "Flug {{origin}}→{{dest_tokyo}} Mai 2027, günstigster Preis / aktuelle Japan-Deals.",
+      "schedule_cron": "30 11 * * 1",
+      "priority": 4,
+      "note": "Generische Deals."
+    },
+    {
+      "name": "Flightradar24 LH742 Status",
+      "site": "https://www.flightradar24.com",
+      "goal_text": "Status/Wochentags-Muster des Flugs LH742 ({{dest_tokyo}}→{{origin}}) beobachten.",
+      "schedule_cron": "0 12 * * 1,4",
+      "priority": 4,
+      "note": "Kein Preis, sondern Flugplan/Status. Anderes Ergebnis-Schema denkbar."
+    }
+  ]
+}

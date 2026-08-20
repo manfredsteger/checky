@@ -11,7 +11,17 @@ export default function CreateAgent() {
   const [name, setName] = useState('');
   const [site, setSite] = useState('');
   const [goal, setGoal] = useState('');
-  const [resultSchema, setResultSchema] = useState('{\n  "title": "string",\n  "price": "string"\n}');
+  const [resultSchema, setResultSchema] = useState('{\n  "value": "string"\n}');
+  const [paramsJson, setParamsJson] = useState('{}');
+  const [enabled, setEnabled] = useState(false);
+
+  const SCHEMA_TEMPLATES: Record<string, string> = {
+    'Frei': '{\n  "value": "string"\n}',
+    'Preis': '{\n  "price": "string",\n  "currency": "string",\n  "note": "string"\n}',
+    'Flug': '{\n  "price": "string",\n  "currency": "string",\n  "airline": "string",\n  "stops": "string",\n  "duration": "string"\n}',
+    'Verfügbarkeit': '{\n  "available": "string",\n  "note": "string"\n}',
+    'Buch': '{\n  "title": "string",\n  "price": "string",\n  "availability": "string"\n}',
+  };
 
   // Schedule Builder State
   const [scheduleMode, setScheduleMode] = useState<'daily' | 'hourly' | 'weekly' | 'monthly' | 'expert'>('daily');
@@ -48,17 +58,19 @@ export default function CreateAgent() {
     mutationFn: () => {
       let schemaObj = {};
       try { schemaObj = JSON.parse(resultSchema); } catch (e) { alert('Ungültiges JSON im Result-Schema'); throw e; }
-      
+      let paramsObj = {};
+      try { paramsObj = JSON.parse(paramsJson || '{}'); } catch (e) { alert('Ungültiges JSON in den Parametern'); throw e; }
+
       return api.createAgent(projectId!, {
         name,
         site,
         goal_text: goal,
         schedule_cron: generatedCron,
         result_schema: schemaObj,
-        params: {},
+        params: paramsObj,
         notify: {},
         jitter_min: 0,
-        enabled: true
+        enabled
       });
     },
     onSuccess: () => {
@@ -111,9 +123,24 @@ export default function CreateAgent() {
             </div>
           </div>
 
-          <div className="bg-[#111827] border border-[#1f2937] p-6 rounded-xl space-y-4">
-            <h2 className="text-sm font-bold text-white uppercase tracking-wider mb-2">Result Schema (JSON)</h2>
-            <textarea value={resultSchema} onChange={e => setResultSchema(e.target.value)} className="w-full h-32 bg-[#1f2937] border border-[#374151] rounded px-4 py-2 text-emerald-400 font-mono text-sm focus:outline-none focus:border-emerald-500" />
+          <div className="bg-[#111827] border border-[#1f2937] p-6 rounded-xl space-y-3">
+            <h2 className="text-sm font-bold text-white uppercase tracking-wider">Ergebnis-Felder (Schema)</h2>
+            <div className="flex flex-wrap gap-2">
+              {Object.keys(SCHEMA_TEMPLATES).map(t => (
+                <button key={t} onClick={() => setResultSchema(SCHEMA_TEMPLATES[t])}
+                  className="px-2.5 py-1 rounded text-xs bg-[#1f2937] text-[#9ca3af] hover:text-white hover:bg-[#374151] transition-colors">
+                  {t}
+                </button>
+              ))}
+            </div>
+            <textarea value={resultSchema} onChange={e => setResultSchema(e.target.value)} className="w-full h-28 bg-[#1f2937] border border-[#374151] rounded px-4 py-2 text-emerald-400 font-mono text-sm focus:outline-none focus:border-emerald-500" />
+            <p className="text-xs text-[#6b7280]">Welche Felder soll ein Ergebnis enthalten? Vorlage wählen oder anpassen.</p>
+          </div>
+
+          <div className="bg-[#111827] border border-[#1f2937] p-6 rounded-xl space-y-3">
+            <h2 className="text-sm font-bold text-white uppercase tracking-wider">Parameter (JSON, optional)</h2>
+            <textarea value={paramsJson} onChange={e => setParamsJson(e.target.value)} className="w-full h-24 bg-[#1f2937] border border-[#374151] rounded px-4 py-2 text-sky-300 font-mono text-sm focus:outline-none focus:border-emerald-500" placeholder='{ "origin": "MUC", "outbound": "2027-05-10" }' />
+            <p className="text-xs text-[#6b7280]">Werte, die im Recipe als <code className="text-sky-300">{'{{platzhalter}}'}</code> in URLs, Eingaben und Selektoren eingesetzt werden.</p>
           </div>
 
           <div className="bg-[#111827] border border-[#1f2937] p-6 rounded-xl space-y-4">
@@ -184,7 +211,15 @@ export default function CreateAgent() {
             </div>
           </div>
 
-          <button 
+          <label className="flex items-center gap-3 bg-[#111827] border border-[#1f2937] p-4 rounded-xl cursor-pointer">
+            <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} className="w-4 h-4 accent-emerald-500" />
+            <span className="text-sm">
+              Sofort aktivieren
+              <span className="block text-xs text-[#6b7280]">Empfehlung: aus lassen und erst per „Neu anlernen" ein Recipe aufnehmen — sonst laufen geplante Checks ohne Recipe ins Leere.</span>
+            </span>
+          </label>
+
+          <button
             disabled={!name || !site || !goal || createMutation.isPending}
             onClick={() => createMutation.mutate()}
             className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold py-3 px-6 rounded-xl transition-colors"

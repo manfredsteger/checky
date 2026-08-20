@@ -37,6 +37,9 @@ migrate: ## Führt die DB-Migrationen aus
 seed: ## Füllt die Datenbank mit Initialdaten
 	$(COMPOSE) exec -w /app/apps/api api npx tsx src/db/seed.ts
 
+seed-flights: ## Importiert das Flug-Projekt aus checky-agents-seed.json
+	$(COMPOSE) exec -w /app/apps/api api npx tsx src/db/seed-flights.ts
+
 db-shell: ## Öffnet eine interaktive PostgreSQL-Shell
 	$(COMPOSE) exec db psql -U checky -d checky
 
