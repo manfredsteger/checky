@@ -1,7 +1,8 @@
-import { chromium, Browser, BrowserContext, Page, Locator } from 'playwright';
+import { Browser, BrowserContext, Page, Locator } from 'playwright';
 import path from 'path';
 import fs from 'fs';
 import { jsonSchemaToZod, type AIProvider } from '@checky/shared';
+import { launchBrowser, createContext } from './browser.js';
 
 export interface Step {
   action: 'goto' | 'click' | 'fill' | 'select' | 'waitFor' | 'extract';
@@ -125,13 +126,9 @@ export async function executeRecipe(
   let page: Page | null = null;
   
   try {
-    browser = await chromium.launch({ headless: true });
-    context = await browser.newContext({
-      locale: 'de-DE',
-      timezoneId: 'Europe/Berlin',
-      viewport: { width: 1440, height: 900 }
-    });
-    
+    browser = await launchBrowser();
+    context = await createContext(browser, { viewport: { width: 1440, height: 900 } });
+
     // Global Timeout of 120s
     context.setDefaultTimeout(120000);
     context.setDefaultNavigationTimeout(120000);

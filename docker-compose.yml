@@ -47,6 +47,9 @@ services:
       - DB_URL=${DB_URL:-postgres://checky:changeme@db:5432/checky}
       - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN}
       - SCREENSHOT_DIR=/data/screenshots
+      # Anti-Detection: headful (Xvfb) + Stealth-Fingerprint/Evasions
+      - HEADLESS=false
+      - STEALTH=true
     volumes:
       - ./data/screenshots:/data/screenshots
     depends_on:
