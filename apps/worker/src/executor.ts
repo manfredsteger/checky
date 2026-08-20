@@ -40,7 +40,7 @@ function substitute(text: string, params: Record<string, any>): string {
 }
 
 // Parse string selectors safely
-function getLocator(page: Page, selectorStr: string): Locator {
+export function getLocator(page: Page, selectorStr: string): Locator {
   if (!selectorStr) throw new Error('Selector is required');
 
   if (selectorStr.startsWith('getByRole(')) {

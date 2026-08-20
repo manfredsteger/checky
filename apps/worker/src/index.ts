@@ -3,6 +3,7 @@ import pg from 'pg';
 import crypto from 'crypto';
 import { executeRecipe } from './executor.js';
 import { ClaudeAgentProvider } from './aiProvider.js';
+import { runRecorderSession } from './recorder.js';
 
 const dbUrl = process.env.DB_URL;
 // KI nur aktiv, wenn ein Abo-Token vorhanden ist (sonst kein Self-Healing -> Run failt sauber).
@@ -26,6 +27,12 @@ async function start() {
 
   await boss.start();
   console.log('[Worker] pg-boss started');
+
+  // Recorder-Queue: Anlern-Sessions (langlaufend, bis 5 min)
+  await boss.createQueue('recorder').catch(() => {});
+  await boss.work('recorder', { batchSize: 1 }, async (jobs: any[]) => {
+    for (const job of jobs) await handleRecorderJob(job);
+  });
 
   // pg-boss v12: Queues müssen existieren, Wildcard-work gibt es nicht.
   // -> Pro Agent eine Queue mit eigenem Worker, registriert in updateSchedules().
@@ -193,6 +200,29 @@ async function handleJob(job: any) {
     await pool!.query(`UPDATE runs SET status = 'failed', finished_at = NOW(), error = $1 WHERE id = $2`, [String(error), run_id]);
     throw error; // Rethrow to let pg-boss handle retries
   }
+}
+
+async function handleRecorderJob(job: any) {
+  const { session_id } = job.data;
+  const { rows } = await pool!.query('SELECT * FROM recorder_sessions WHERE id = $1', [session_id]);
+  if (rows.length === 0) return;
+  const session = rows[0];
+  if (session.status !== 'running') return; // bereits abgebrochen/fertig
+
+  const { rows: agents } = await pool!.query('SELECT * FROM agents WHERE id = $1', [session.agent_id]);
+  if (agents.length === 0) {
+    await pool!.query(`UPDATE recorder_sessions SET status='failed', error='Agent nicht gefunden' WHERE id=$1`, [session_id]);
+    return;
+  }
+
+  if (!process.env.CLAUDE_CODE_OAUTH_TOKEN) {
+    await pool!.query(`UPDATE recorder_sessions SET status='failed', error='Kein CLAUDE_CODE_OAUTH_TOKEN gesetzt' WHERE id=$1`, [session_id]);
+    return;
+  }
+
+  console.log(`[Worker] Recorder-Session ${session_id} für Agent ${agents[0].name} gestartet`);
+  await runRecorderSession(session_id, agents[0], pool!);
+  console.log(`[Worker] Recorder-Session ${session_id} beendet`);
 }
 
 start().catch(err => {

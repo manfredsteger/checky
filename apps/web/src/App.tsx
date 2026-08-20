@@ -4,7 +4,7 @@ import Layout from './layout/Layout';
 import ProjectList from './pages/ProjectList';
 import ProjectDetail from './pages/ProjectDetail';
 import CreateAgent from './pages/CreateAgent';
-import RecorderPlaceholder from './pages/RecorderPlaceholder';
+import Recorder from './pages/Recorder';
 import RunsList from './pages/RunsList';
 import AgentResults from './pages/AgentResults';
 
@@ -22,7 +22,7 @@ export default function App() {
             <Route path="agents/:agentId/results" element={<AgentResults />} />
           </Route>
           <Route path="projects/:projectId/agents/new" element={<CreateAgent />} />
-          <Route path="projects/:projectId/agents/:agentId/recorder" element={<RecorderPlaceholder />} />
+          <Route path="projects/:projectId/agents/:agentId/recorder" element={<Recorder />} />
         </Routes>
       </BrowserRouter>
     </QueryClientProvider>

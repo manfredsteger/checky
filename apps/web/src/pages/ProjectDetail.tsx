@@ -119,7 +119,7 @@ export default function ProjectDetail() {
                         to={`/projects/${projectId}/agents/${agent.id}/recorder`}
                         className='bg-[#1f2937] hover:bg-[#374151] text-white border border-[#374151] text-[10px] font-bold py-1.5 px-3 rounded transition-colors'
                       >
-                        Recorder (M4)
+                        Neu anlernen
                       </Link>
                       <button 
                         disabled={triggerMutation.isPending}

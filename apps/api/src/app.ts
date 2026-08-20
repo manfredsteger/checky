@@ -232,6 +232,63 @@ app.post('/api/agents/:id/trigger', asyncHandler(async (req, res) => {
   res.status(201).json(result.rows[0]);
 }));
 
+// --- Recorder (Schritt 19) ---------------------------------------------------
+
+app.post('/api/agents/:id/recorder', asyncHandler(async (req, res) => {
+  const { id } = IdParamSchema.parse(req.params);
+  const agent = await query('SELECT id FROM agents WHERE id = $1', [id]);
+  if (agent.rowCount === 0) return res.status(404).json({ error: 'Agent not found' });
+
+  const result = await query(
+    `INSERT INTO recorder_sessions (agent_id, status) VALUES ($1, 'running') RETURNING *`, [id]
+  );
+  const session = result.rows[0];
+
+  if (boss) {
+    try { await boss.createQueue('recorder'); } catch { /* existiert bereits */ }
+    await boss.send('recorder', { session_id: session.id });
+  } else {
+    console.warn('[API] DB_URL fehlt, Recorder-Job nicht eingereiht.');
+  }
+  res.status(201).json(session);
+}));
+
+app.get('/api/recorder/:sid', asyncHandler(async (req, res) => {
+  const { sid } = z.object({ sid: z.string().uuid() }).parse(req.params);
+  const result = await query('SELECT * FROM recorder_sessions WHERE id = $1', [sid]);
+  if (result.rowCount === 0) return res.status(404).json({ error: 'Session not found' });
+  res.json(result.rows[0]);
+}));
+
+app.post('/api/recorder/:sid/abort', asyncHandler(async (req, res) => {
+  const { sid } = z.object({ sid: z.string().uuid() }).parse(req.params);
+  const result = await query(
+    `UPDATE recorder_sessions SET status='aborted', updated_at=NOW()
+     WHERE id=$1 AND status IN ('running','awaiting_confirm') RETURNING *`, [sid]
+  );
+  if (result.rowCount === 0) return res.status(404).json({ error: 'Session not found or not abortable' });
+  res.json(result.rows[0]);
+}));
+
+app.post('/api/recorder/:sid/confirm', asyncHandler(async (req, res) => {
+  const { sid } = z.object({ sid: z.string().uuid() }).parse(req.params);
+  const sess = await query('SELECT * FROM recorder_sessions WHERE id = $1', [sid]);
+  if (sess.rowCount === 0) return res.status(404).json({ error: 'Session not found' });
+  const session = sess.rows[0];
+  if (session.status !== 'awaiting_confirm' || !session.recipe_preview) {
+    return res.status(400).json({ error: 'Session ist nicht bestätigungsbereit' });
+  }
+
+  const vRes = await query('SELECT COALESCE(MAX(version),0)+1 AS next FROM recipes WHERE agent_id = $1', [session.agent_id]);
+  const version = vRes.rows[0].next;
+  const rec = await query(
+    'INSERT INTO recipes (agent_id, version, steps) VALUES ($1, $2, $3) RETURNING *',
+    [session.agent_id, version, JSON.stringify(session.recipe_preview)]
+  );
+  await query(`UPDATE recorder_sessions SET status='completed', updated_at=NOW() WHERE id=$1`, [sid]);
+  res.status(201).json({ recipe: rec.rows[0], version });
+}));
+
 app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
   if (err instanceof z.ZodError) {
     return res.status(400).json({ error: 'Validation error: ' + (err as any).issues.map((e: any) => `${e.path.join('.')}: ${e.message}`).join(', ') });
