@@ -119,22 +119,30 @@ export default function CreateAgent() {
         {(blueprintsQ.data?.length ?? 0) > 0 && (
           <div className="bg-[#111827] border border-sky-500/30 p-6 rounded-xl mb-6">
             <h2 className="text-sm font-bold text-white uppercase tracking-wider mb-1">Vorlage (Blueprint)</h2>
-            <p className="text-xs text-[#6b7280] mb-3">Fertige Quelle wählen — füllt URL, Ziel und Zeitplan automatisch. API-Quellen (z.&nbsp;B. Kiwi) brauchen kein Anlernen.</p>
-            <div className="flex flex-wrap gap-2">
+            <p className="text-xs text-[#6b7280] mb-4">Fertige Quelle wählen — füllt URL, Ziel und Zeitplan automatisch. <span className="text-sky-300 font-semibold">API</span>-Quellen liefern Daten direkt (kein Anlernen); <span className="text-[#9ca3af] font-semibold">Browser</span>-Quellen musst du per Recorder anlernen.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <button onClick={() => applyBlueprint(undefined)}
-                className={`px-3 py-1.5 rounded text-xs font-semibold border transition-colors ${!blueprintId ? 'bg-[#1f2937] border-[#374151] text-white' : 'bg-transparent border-[#1f2937] text-[#9ca3af] hover:text-white'}`}>
-                Frei / manuell
+                className={`text-left p-3 rounded-lg border transition-colors ${!blueprintId ? 'bg-[#1f2937] border-[#4b5563]' : 'bg-[#0f151f] border-[#1f2937] hover:border-[#374151]'}`}>
+                <div className="text-sm font-semibold text-white">Frei / manuell</div>
+                <div className="text-xs text-[#6b7280] mt-0.5">Alles selbst eintragen (URL, Ziel, Parameter).</div>
               </button>
-              {blueprintsQ.data!.map(bp => (
-                <button key={bp.id} onClick={() => applyBlueprint(bp)}
-                  className={`px-3 py-1.5 rounded text-xs font-semibold border transition-colors flex items-center gap-1.5 ${blueprintId === bp.id ? 'bg-sky-500/15 border-sky-500/50 text-sky-200' : 'bg-transparent border-[#1f2937] text-[#9ca3af] hover:text-white'}`}>
-                  {bp.name}
-                  {bp.kind === 'api' && <span className="px-1 py-0.5 rounded bg-sky-500/20 text-sky-300 text-[9px] uppercase">API</span>}
-                </button>
-              ))}
+              {blueprintsQ.data!.map(bp => {
+                const active = blueprintId === bp.id;
+                const isApi = bp.kind === 'api';
+                return (
+                  <button key={bp.id} onClick={() => applyBlueprint(bp)}
+                    className={`text-left p-3 rounded-lg border transition-colors ${active ? 'bg-sky-500/10 border-sky-500/60' : 'bg-[#0f151f] border-[#1f2937] hover:border-[#374151]'}`}>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-white">{bp.name}</span>
+                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${isApi ? 'bg-sky-500/20 text-sky-300' : 'bg-[#374151] text-[#9ca3af]'}`}>{isApi ? 'API' : 'Browser'}</span>
+                    </div>
+                    {bp.description && <div className="text-xs text-[#9ca3af] mt-1 leading-snug">{bp.description}</div>}
+                  </button>
+                );
+              })}
             </div>
             {blueprintId && provider && (
-              <p className="text-xs text-sky-300 mt-3">✓ API-Quelle „{provider}" — kein Anlernen nötig; die Parameter kommen aus den Projekt-Einstellungen (Zahnrad).</p>
+              <p className="text-xs text-sky-300 mt-4">✓ API-Quelle „{provider}" gewählt — kein Anlernen nötig. Die konkreten Werte (z.&nbsp;B. PLZ, Menge, Route) kommen aus den Projekt-Einstellungen (Zahnrad).</p>
             )}
           </div>
         )}

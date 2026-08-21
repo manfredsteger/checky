@@ -1,11 +1,11 @@
 {
   "id": "heizoel24",
-  "name": "HEIZOEL24 (API)",
+  "name": "HEIZOEL24 – PLZ-genau",
   "manifest_id": "heizoel",
   "kind": "api",
   "provider": "heizoel24",
   "icon": "oil",
-  "description": "PLZ- und mengengenauer Heizölpreis (€/100L) über heizoel24.de — zuverlässige API-Quelle, kein Anlernen.",
+  "description": "Konkreter Liefer-Preis (€/100L) für deine PLZ + Menge — wie im heizoel24.de-Rechner. Berücksichtigt Region und Abladestellen.",
   "site": "https://www.heizoel24.de/",
   "default_schedule": "0 8 * * *",
   "version": 1

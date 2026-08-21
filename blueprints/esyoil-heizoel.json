@@ -1,11 +1,11 @@
 {
   "id": "esyoil-heizoel",
-  "name": "esyoil Heizöl (API)",
+  "name": "esyoil Heizöl – Bundesschnitt",
   "manifest_id": "heizoel",
   "kind": "api",
   "provider": "esyoil",
   "icon": "oil",
-  "description": "Nationaler Heizölpreis (€/100L) über esyoil — zuverlässige API-Quelle, kein Anlernen. PLZ-genau folgt später.",
+  "description": "Deutschland-Durchschnittspreis (€/100L). Ohne PLZ — gut für den bundesweiten Trend. Für einen konkreten Liefer-Preis „HEIZOEL24 – PLZ-genau“ nehmen.",
   "site": "https://www.esyoil.com/",
   "default_schedule": "0 8 * * *",
   "version": 1
