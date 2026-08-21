@@ -21,12 +21,12 @@ export default function App() {
           <Route path="/" element={<Layout />}>
             <Route index element={<ProjectList />} />
             <Route path="projects/:projectId" element={<ProjectDetail />} />
+            <Route path="projects/:projectId/agents/:agentId/recorder" element={<Recorder />} />
             <Route path="runs" element={<RunsList />} />
             <Route path="settings" element={<Settings />} />
             <Route path="agents/:agentId/results" element={<AgentResults />} />
           </Route>
           <Route path="projects/:projectId/agents/new" element={<CreateAgent />} />
-          <Route path="projects/:projectId/agents/:agentId/recorder" element={<Recorder />} />
         </Routes>
       </BrowserRouter>
       </ToastProvider>

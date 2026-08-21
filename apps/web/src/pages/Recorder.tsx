@@ -22,6 +22,11 @@ export default function RecorderPage() {
   const [instr, setInstr] = useState('');
 
   const agentQ = useQuery({ queryKey: ['agent', agentId], queryFn: () => api.getAgent(agentId!), enabled: !!agentId });
+  const projectQ = useQuery({ queryKey: ['projects', agentQ.data?.project_id], queryFn: () => api.getProject(agentQ.data!.project_id), enabled: !!agentQ.data?.project_id });
+
+  // {{Platzhalter}} im Ziel-Text mit echten Projekt-/Agent-Parametern füllen.
+  const mergedParams: Record<string, any> = { ...(projectQ.data?.params || {}), ...((agentQ.data?.params as any) || {}) };
+  const goalText = (agentQ.data?.goal_text || '').replace(/\{\{\s*(\w+)\s*\}\}/g, (_m, k) => (mergedParams[k] != null && mergedParams[k] !== '' ? String(mergedParams[k]) : `{{${k}}}`));
 
   const start = useMutation({
     mutationFn: (mode: 'auto' | 'assisted') => api.startRecorder(agentId!, mode),
@@ -62,12 +67,13 @@ export default function RecorderPage() {
 
   return (
     <div className="flex-1 flex flex-col bg-[#0a0a0b] text-white p-6 gap-4 overflow-auto">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold">Recorder — {agentQ.data?.name ?? 'Agent'}</h1>
-          <p className="text-sm text-[#9ca3af]">{agentQ.data?.goal_text}</p>
+      <div className="flex items-center justify-between gap-4">
+        <div className="min-w-0">
+          <Link to={`/projects/${projectId}`} className="text-xs text-[#6b7280] hover:text-emerald-400 inline-flex items-center gap-1 mb-1">← {projectQ.data?.name ?? 'Projekt'}</Link>
+          <h1 className="text-xl font-bold truncate">Anlernen — {agentQ.data?.name ?? 'Agent'}</h1>
+          <p className="text-sm text-[#9ca3af] truncate" title={goalText}>{goalText}</p>
         </div>
-        <Link to={`/projects/${projectId}`} className="text-sm bg-[#1f2937] hover:bg-[#374151] px-4 py-2 rounded">Zurück</Link>
+        <Link to={`/projects/${projectId}`} className="shrink-0 text-sm bg-[#1f2937] hover:bg-[#374151] px-4 py-2 rounded">Zurück</Link>
       </div>
 
       {!sid && (
