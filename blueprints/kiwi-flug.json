@@ -1,0 +1,12 @@
+{
+  "id": "kiwi-flug",
+  "name": "Kiwi Flug (API)",
+  "manifest_id": "flight",
+  "kind": "api",
+  "provider": "kiwi",
+  "icon": "plane",
+  "description": "Günstigster Flug über Kiwi.com — zuverlässige API-Quelle mit Direktflug-/Stopps-Filter, kein Formular-Anlernen nötig.",
+  "site": "https://www.kiwi.com/",
+  "default_schedule": "0 7 * * *",
+  "version": 1
+}

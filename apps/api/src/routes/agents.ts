@@ -26,9 +26,9 @@ agentsRouter.post('/api/projects/:id/agents', asyncHandler(async (req, res) => {
   if (project.rowCount === 0) return res.status(404).json({ error: 'Project not found' });
 
   const result = await query(
-    `INSERT INTO agents (project_id, name, site, goal_text, params, schedule_cron, jitter_min, enabled, notify, result_schema)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
-    [id, data.name, data.site, data.goal_text, data.params, data.schedule_cron, data.jitter_min, data.enabled, data.notify, data.result_schema]
+    `INSERT INTO agents (project_id, name, site, goal_text, params, schedule_cron, jitter_min, enabled, notify, result_schema, provider)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
+    [id, data.name, data.site, data.goal_text, data.params, data.schedule_cron, data.jitter_min, data.enabled, data.notify, data.result_schema, data.provider ?? null]
   );
   res.status(201).json(result.rows[0]);
 }));
@@ -59,9 +59,10 @@ agentsRouter.patch('/api/agents/:id', asyncHandler(async (req, res) => {
       jitter_min = COALESCE($6, jitter_min),
       enabled = COALESCE($7, enabled),
       notify = COALESCE($8, notify),
-      result_schema = COALESCE($9, result_schema)
-     WHERE id = $10 RETURNING *`,
-    [data.name, data.site, data.goal_text, data.params, data.schedule_cron, data.jitter_min, data.enabled, data.notify, data.result_schema, id]
+      result_schema = COALESCE($9, result_schema),
+      provider = COALESCE($10, provider)
+     WHERE id = $11 RETURNING *`,
+    [data.name, data.site, data.goal_text, data.params, data.schedule_cron, data.jitter_min, data.enabled, data.notify, data.result_schema, data.provider ?? null, id]
   );
   res.json(result.rows[0]);
 }));

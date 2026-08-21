@@ -51,6 +51,9 @@ export const BlueprintSchema = z.object({
   manifest_id: z.string(),
   icon: z.string().optional(),
   description: z.string().optional(),
+  // Ausführungsart: "browser" = anlernbares Playwright-Recipe, "api" = Provider-Adapter.
+  kind: z.enum(['browser', 'api']).default('browser'),
+  provider: z.string().optional(),        // bei kind:api der Adapter-Name (z.B. "kiwi")
   site: z.string(),
   goal_template: z.string().optional(),
   default_schedule: z.string().optional(),
@@ -80,6 +83,7 @@ export const AgentSchema = z.object({
   enabled: z.boolean().default(true),
   notify: z.record(z.string(), z.any()).nullable().default({}),
   result_schema: z.record(z.string(), z.any()).nullable().default({}),
+  provider: z.string().nullable().optional(),   // gesetzt = API-Quelle (kind:api), sonst Browser-Recipe
   has_recipe: z.boolean().optional(),   // wird von der API mitgeliefert (nicht in DB)
   created_at: z.coerce.date(),
 });

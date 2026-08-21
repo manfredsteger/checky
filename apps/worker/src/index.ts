@@ -5,6 +5,7 @@ import { executeRecipe } from './executor.js';
 import { ClaudeAgentProvider } from './aiProvider.js';
 import { runRecorderSession, runAssistedRecorderSession } from './recorder.js';
 import { enqueueNotification, processOutbox, runCleanup, checkRateLimit } from './notify.js';
+import { fetchProvider } from './providers/index.js';
 
 const dbUrl = process.env.DB_URL;
 // KI nur aktiv, wenn ein Abo-Token vorhanden ist (sonst kein Self-Healing -> Run failt sauber).
@@ -183,6 +184,23 @@ async function handleJob(job: any) {
   }
 
   try {
+    // 4b. API-Quelle (kind:api): Provider-Adapter statt Recipe/Browser.
+    if (agent.provider) {
+      const resultData = await fetchProvider(agent.provider, agent.params || {});
+      const canonicalStr = JSON.stringify(resultData, Object.keys(resultData).sort());
+      const data_hash = crypto.createHash('sha256').update(canonicalStr).digest('hex');
+      const { rows: last } = await pool!.query(
+        `SELECT data_hash FROM results WHERE agent_id = $1 ORDER BY created_at DESC LIMIT 1`, [agent_id]);
+      const changed = last.length === 0 || last[0].data_hash !== data_hash;
+      await pool!.query(
+        `INSERT INTO results (run_id, agent_id, data, data_hash, changed) VALUES ($1, $2, $3, $4, $5)`,
+        [run_id, agent_id, JSON.stringify(resultData), data_hash, changed]);
+      await pool!.query(`UPDATE runs SET status='succeeded', finished_at=NOW() WHERE id=$1`, [run_id]);
+      console.log(`[Worker] Run ${run_id} succeeded via provider "${agent.provider}". Changed: ${changed}`);
+      if (changed) await sendRunNotification(agent, run_id, 'succeeded', true, resultData);
+      return;
+    }
+
     // 5. Fetch Recipe
     const { rows: recipes } = await pool!.query('SELECT * FROM recipes WHERE agent_id = $1 ORDER BY version DESC LIMIT 1', [agent_id]);
     

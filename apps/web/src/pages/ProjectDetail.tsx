@@ -41,7 +41,8 @@ function AgentCard({ agent, projectId, resolved, onToggle, onTrigger, triggering
   // Manifest-Kennzahl bevorzugt; sonst generische Felder als Fallback.
   const hasHeadline = !!(last && resolved.headlineField && last.data?.[resolved.headlineField] != null);
   const fields = last ? Object.keys(last.data || {}).filter(k => !k.startsWith('_') && k !== resolved.headlineField).slice(0, 3) : [];
-  const notLearned = agent.has_recipe === false;
+  // API-Quellen (provider) brauchen kein angelerntes Recipe.
+  const notLearned = agent.has_recipe === false && !agent.provider;
 
   return (
     <div className={`bg-[#111827] border p-5 rounded-xl flex flex-col gap-3 ${notLearned ? 'border-amber-500/40' : 'border-[#1f2937]'} ${!agent.enabled ? 'opacity-70' : ''}`}>
@@ -52,6 +53,7 @@ function AgentCard({ agent, projectId, resolved, onToggle, onTrigger, triggering
             ? <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 text-[10px] font-bold rounded uppercase tracking-wider">Aktiv</span>
             : <span className="px-2 py-0.5 bg-[#374151] text-[#9ca3af] text-[10px] font-bold rounded uppercase tracking-wider">Inaktiv</span>}
           {notLearned && <span className="px-2 py-0.5 bg-amber-500/15 text-amber-300 text-[10px] font-bold rounded uppercase tracking-wider">Nicht angelernt</span>}
+          {agent.provider && <span className="px-2 py-0.5 bg-sky-500/15 text-sky-300 text-[10px] font-bold rounded uppercase tracking-wider">API · {agent.provider}</span>}
         </div>
         <button onClick={() => onToggle(agent)} className="text-[10px] bg-[#1f2937] hover:bg-[#374151] px-2 py-1 rounded text-white">
           {agent.enabled ? 'Pausieren' : 'Aktivieren'}
@@ -92,12 +94,14 @@ function AgentCard({ agent, projectId, resolved, onToggle, onTrigger, triggering
         </div>
         <div className="flex items-center gap-1.5">
           <Link to={`/agents/${agent.id}/results`} className="bg-[#1f2937] hover:bg-[#374151] text-white border border-[#374151] text-[10px] font-bold py-1.5 px-2.5 rounded">Ergebnisse</Link>
-          <Link to={`/projects/${projectId}/agents/${agent.id}/recorder`}
-            className={notLearned
-              ? "bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold py-1.5 px-2.5 rounded"
-              : "bg-[#1f2937] hover:bg-[#374151] text-white border border-[#374151] text-[10px] font-bold py-1.5 px-2.5 rounded"}>
-            Anlernen
-          </Link>
+          {!agent.provider && (
+            <Link to={`/projects/${projectId}/agents/${agent.id}/recorder`}
+              className={notLearned
+                ? "bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold py-1.5 px-2.5 rounded"
+                : "bg-[#1f2937] hover:bg-[#374151] text-white border border-[#374151] text-[10px] font-bold py-1.5 px-2.5 rounded"}>
+              Anlernen
+            </Link>
+          )}
           <button disabled={triggering} onClick={() => onTrigger(agent.id)}
             className="bg-[#1f2937] hover:bg-emerald-600/20 text-white hover:text-emerald-400 border border-[#374151] hover:border-emerald-500/50 text-[10px] font-bold py-1.5 px-2.5 rounded">Ausführen</button>
         </div>

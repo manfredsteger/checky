@@ -11,6 +11,8 @@
     { "key": "adults", "label": "Erwachsene", "type": "number", "default": 2, "min": 1, "max": 9 },
     { "key": "children", "label": "Kinder", "type": "number", "default": 0, "min": 0, "max": 9 },
     { "key": "cabin", "label": "Klasse", "type": "select", "options": ["economy", "premium", "business", "first"], "default": "economy" },
+    { "key": "max_stops", "label": "Max. Zwischenstopps", "type": "select", "options": ["0", "1", "2"], "default": "0", "help": "0 = nur Direktflüge. Wichtig, sonst gewinnen 24h-Umsteige-Konstrukte" },
+    { "key": "max_duration_h", "label": "Max. Reisezeit je Strecke (h)", "type": "number", "default": null, "help": "Optional: Flüge länger als das werden verworfen" },
     { "key": "target_price", "label": "Wunschpreis (€)", "type": "number", "default": null, "help": "Bei diesem Preis oder darunter hervorheben/benachrichtigen" },
     { "key": "max_price", "label": "Schmerzgrenze (€)", "type": "number", "default": null, "help": "Oberhalb als teuer markieren" }
   ],
