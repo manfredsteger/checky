@@ -137,7 +137,7 @@ export interface AIProvider {
 
 // --- Recorder (Schritt 19): Anlernen per Sprache -----------------------------
 
-export const RecorderStatus = z.enum(['running', 'awaiting_confirm', 'completed', 'aborted', 'failed']);
+export const RecorderStatus = z.enum(['running', 'awaiting_instruction', 'awaiting_confirm', 'completed', 'aborted', 'failed']);
 export type RecorderStatus = z.infer<typeof RecorderStatus>;
 
 // Ein mitgeschnittenes Ereignis (eine Browseraktion des Anlern-Agenten).
@@ -154,6 +154,8 @@ export const RecorderSessionSchema = z.object({
   id: z.string().uuid(),
   agent_id: z.string().uuid(),
   status: RecorderStatus,
+  mode: z.enum(['auto', 'assisted']).default('auto'),
+  pending_instruction: z.string().nullable().optional(),
   events: z.array(RecorderEventSchema).default([]),
   recipe_preview: z.array(z.any()).nullable().optional(),
   result_fields: z.array(z.string()).nullable().optional(),

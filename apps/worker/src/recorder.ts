@@ -310,3 +310,111 @@ export async function runRecorderSession(sessionId: string, agent: any, pool: Po
     if (browser) await browser.close().catch(() => {});
   }
 }
+
+function buildAssistedSystemPrompt(agent: any): string {
+  return [
+    'Du bist ein Anlern-Assistent für ein Website-Monitoring-Tool und steuerst einen bereits geöffneten Browser.',
+    'Der Nutzer gibt dir jeweils EINE Anweisung. Führe GENAU diese eine Anweisung aus – nicht mehr, nicht weiter.',
+    'Mache zuerst bei Bedarf snapshot, um die aktuelle Seite zu sehen. Führe dann die passenden Aktionen aus und stoppe.',
+    `ZIEL (Gesamtkontext): ${agent.goal_text}`,
+    agent.params && Object.keys(agent.params).length ? `PARAMETER: ${JSON.stringify(agent.params)}` : '',
+    '',
+    'REGELN:',
+    '- Bleibe ausschließlich auf der erlaubten Domain.',
+    '- Niemals Buchen/Kaufen/Bezahlen/Anmelden/Bestellen anklicken; keine Passwort-/Zahlungsfelder.',
+    '- Stabile Locators bevorzugen: getByRole > getByLabel > getByPlaceholder > CSS. Kein XPath.',
+    '- Bei Autocomplete-Feldern: tippen, kurz warten, dann den passenden Vorschlag anklicken.',
+    '- Wenn der Nutzer ein Ergebnisfeld benennt (z.B. Preis), nutze extract_field(name, selector).',
+    '- Ist die Anweisung unklar/riskant, tu nichts Riskantes und erkläre kurz das Problem.',
+  ].filter(Boolean).join('\n');
+}
+
+// Assistierter Modus: Browser bleibt offen, der Nutzer steuert per Anweisungen.
+export async function runAssistedRecorderSession(sessionId: string, agent: any, pool: Pool): Promise<void> {
+  if (!fs.existsSync(SCREENSHOT_DIR)) fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
+  const shotPath = path.join(SCREENSHOT_DIR, `recorder-${sessionId}.png`);
+  const shotRel = `/data/screenshots/recorder-${sessionId}.png`;
+
+  const ctx: RecorderCtx = {
+    events: [], resultFields: {},
+    allowedHost: new URL(agent.site).hostname,
+    actionBudget: 500, aborted: false,
+  };
+
+  let browser: Browser | null = null;
+  let context: BrowserContext | null = null;
+  let page: Page | null = null;
+  let ticker: NodeJS.Timeout | null = null;
+
+  const persist = async (extra: Record<string, any> = {}) => {
+    const cols = ['events = $2', 'updated_at = NOW()'];
+    const vals: any[] = [sessionId, JSON.stringify(ctx.events)];
+    let i = 3;
+    for (const [k, v] of Object.entries(extra)) { cols.push(`${k} = $${i++}`); vals.push(v); }
+    await pool.query(`UPDATE recorder_sessions SET ${cols.join(', ')} WHERE id = $1`, vals);
+  };
+
+  try {
+    browser = await launchBrowser();
+    context = await createContext(browser, { viewport: { width: 1440, height: 900 } });
+    context.setDefaultTimeout(30000);
+    page = await context.newPage();
+    await page.route('**/*', route => {
+      hostAllowed(route.request().url(), ctx.allowedHost) ? route.continue() : route.abort();
+    });
+    await page.goto(agent.site, { waitUntil: 'domcontentloaded' }).catch(() => {});
+
+    const getPage = () => page!;
+    const server = buildRecorderServer(getPage, ctx);
+    const systemPrompt = buildAssistedSystemPrompt(agent);
+    const allowed = ['mcp__recorder__snapshot', 'mcp__recorder__navigate', 'mcp__recorder__click', 'mcp__recorder__type', 'mcp__recorder__read_text', 'mcp__recorder__extract_field'];
+
+    ticker = setInterval(async () => {
+      try { await page!.screenshot({ path: shotPath }).catch(() => {}); await persist({ screenshot_path: shotRel }); } catch { /* ignore */ }
+    }, 2000);
+
+    await page.screenshot({ path: shotPath }).catch(() => {});
+    await persist({ status: 'awaiting_instruction', screenshot_path: shotRel });
+
+    const deadline = Date.now() + 30 * 60 * 1000;   // 30 Min Gesamtlimit
+    while (Date.now() < deadline) {
+      const { rows } = await pool.query('SELECT status, pending_instruction FROM recorder_sessions WHERE id = $1', [sessionId]);
+      const row = rows[0];
+      if (!row || row.status === 'aborted') { ctx.aborted = true; break; }
+
+      const instr = (row.pending_instruction || '').trim();
+      if (!instr) { await new Promise(r => setTimeout(r, 1500)); continue; }
+
+      await pool.query(`UPDATE recorder_sessions SET pending_instruction = NULL, status = 'running', updated_at = NOW() WHERE id = $1`, [sessionId]);
+
+      if (instr === '__FINISH__') {
+        const recipe = distillRecipe(ctx.events, ctx.resultFields, agent.params || {});
+        await persist({ status: 'awaiting_confirm', recipe_preview: JSON.stringify(recipe), result_fields: JSON.stringify(Object.keys(ctx.resultFields)) });
+        return;
+      }
+
+      ctx.events.push({ ts: Date.now(), tool: 'instruction', input: { text: instr } });
+      try {
+        for await (const message of query({
+          prompt: instr,
+          options: { model: 'sonnet', systemPrompt, mcpServers: { recorder: server }, allowedTools: allowed, maxTurns: 15 } as any,
+        })) {
+          if (ctx.aborted) break;
+        }
+      } catch (e: any) {
+        ctx.events.push({ ts: Date.now(), tool: 'error', result: String(e?.message || e) });
+      }
+      await persist({ status: 'awaiting_instruction' });
+    }
+
+    if (ctx.aborted) { await persist({ status: 'aborted' }); return; }
+    const recipe = distillRecipe(ctx.events, ctx.resultFields, agent.params || {});
+    await persist({ status: 'awaiting_confirm', recipe_preview: JSON.stringify(recipe), result_fields: JSON.stringify(Object.keys(ctx.resultFields)) });
+  } catch (e: any) {
+    await persist({ status: 'failed', error: String(e?.message || e) }).catch(() => {});
+  } finally {
+    if (ticker) clearInterval(ticker);
+    if (context) await context.close().catch(() => {});
+    if (browser) await browser.close().catch(() => {});
+  }
+}
