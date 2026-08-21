@@ -1,0 +1,32 @@
+{
+  "id": "flight",
+  "name": "Flugpreis",
+  "icon": "plane",
+  "description": "Flugpreise und Verfügbarkeit für eine Route beobachten.",
+  "params": [
+    { "key": "origin", "label": "Abflughafen", "type": "text", "default": "", "placeholder": "z.B. MUC oder München", "help": "IATA-Code oder Stadt" },
+    { "key": "dest", "label": "Zielflughafen", "type": "text", "default": "", "placeholder": "z.B. HND oder Tokio" },
+    { "key": "outbound", "label": "Hinreise", "type": "date", "default": "" },
+    { "key": "inbound", "label": "Rückreise", "type": "date", "default": "", "help": "leer lassen für Nur-Hinflug" },
+    { "key": "adults", "label": "Erwachsene", "type": "number", "default": 2, "min": 1, "max": 9 },
+    { "key": "children", "label": "Kinder", "type": "number", "default": 0, "min": 0, "max": 9 },
+    { "key": "cabin", "label": "Klasse", "type": "select", "options": ["economy", "premium", "business", "first"], "default": "economy" },
+    { "key": "target_price", "label": "Wunschpreis (€)", "type": "number", "default": null, "help": "Bei diesem Preis oder darunter hervorheben/benachrichtigen" },
+    { "key": "max_price", "label": "Schmerzgrenze (€)", "type": "number", "default": null, "help": "Oberhalb als teuer markieren" }
+  ],
+  "result_schema": {
+    "type": "object",
+    "properties": {
+      "price": { "type": "string" },
+      "currency": { "type": "string" },
+      "airline": { "type": "string" },
+      "stops": { "type": "string" },
+      "duration": { "type": "string" }
+    }
+  },
+  "display": { "headline": "price", "chart_field": "price", "target_param": "target_price", "unit": "€" },
+  "goal_template": "Flug {{origin}} → {{dest}} ({{outbound}}{% if inbound %} / {{inbound}}{% endif %}), {{adults}} Erwachsene + {{children}} Kinder, {{cabin}}. Günstigsten Gesamtpreis + Airline auslesen.",
+  "default_schedule": "0 7 * * *",
+  "version": 1,
+  "changelog": ["v1: Erststand — origin/dest/dates/pax/cabin/target_price/max_price"]
+}

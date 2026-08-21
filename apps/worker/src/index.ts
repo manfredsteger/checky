@@ -147,6 +147,12 @@ async function handleJob(job: any) {
   }
   const agent = agents[0];
 
+  // Projekt-Params + Agent-Params zusammenführen (Agent überschreibt Projekt).
+  try {
+    const { rows: pr } = await pool!.query('SELECT params FROM projects WHERE id = $1', [agent.project_id]);
+    agent.params = { ...(pr[0]?.params || {}), ...(agent.params || {}) };
+  } catch { /* Fallback: nur Agent-Params */ }
+
   // 3. Jitter for cron jobs
   if (source === 'cron' && agent.jitter_min > 0) {
     const jitterMs = Math.floor(Math.random() * agent.jitter_min * 60 * 1000);

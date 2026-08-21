@@ -7,9 +7,40 @@ export const ProjectSchema = z.object({
   id: z.string().uuid(),
   name: z.string().min(1),
   description: z.string().nullable().optional(),
+  manifest_id: z.string().nullable().optional(),
+  params: z.record(z.string(), z.any()).nullable().default({}),
   created_at: z.coerce.date(),
 });
 export type Project = z.infer<typeof ProjectSchema>;
+
+// --- Manifeste (Tracking-Typ-Vorlagen) ---------------------------------------
+export const ManifestParamSchema = z.object({
+  key: z.string(),
+  label: z.string(),
+  type: z.string(),                       // text | number | date | select
+  default: z.any().optional(),
+  placeholder: z.string().optional(),
+  help: z.string().optional(),
+  options: z.array(z.string()).optional(),
+  min: z.number().optional(),
+  max: z.number().optional(),
+  step: z.number().optional(),
+});
+export type ManifestParam = z.infer<typeof ManifestParamSchema>;
+
+export const ManifestSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  icon: z.string().optional(),
+  description: z.string().optional(),
+  params: z.array(ManifestParamSchema).default([]),
+  result_schema: z.any().optional(),
+  display: z.record(z.string(), z.any()).optional(),
+  goal_template: z.string().optional(),
+  default_schedule: z.string().optional(),
+  version: z.number().optional(),
+});
+export type Manifest = z.infer<typeof ManifestSchema>;
 
 export const AgentSchema = z.object({
   id: z.string().uuid(),
@@ -64,7 +95,12 @@ export const ResultSchema = z.object({
 });
 export type Result = z.infer<typeof ResultSchema>;
 
-export const CreateProjectSchema = ProjectSchema.pick({ name: true, description: true });
+export const CreateProjectSchema = z.object({
+  name: z.string().min(1),
+  description: z.string().nullable().optional(),
+  manifest_id: z.string().nullable().optional(),
+  params: z.record(z.string(), z.any()).optional(),
+});
 export type CreateProject = z.infer<typeof CreateProjectSchema>;
 
 export const UpdateProjectSchema = CreateProjectSchema.partial();

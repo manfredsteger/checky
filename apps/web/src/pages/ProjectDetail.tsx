@@ -4,6 +4,8 @@ import { useParams, Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { useToast } from '../ui/toast';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { ProjectParamsEditor } from '../ui/ProjectParamsEditor';
+import { Settings2 } from 'lucide-react';
 import { CronExpressionParser } from 'cron-parser';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -91,6 +93,7 @@ export default function ProjectDetail() {
   const queryClient = useQueryClient();
   const toast = useToast();
   const [confirmRunAll, setConfirmRunAll] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const { data: project, error: projectError } = useQuery({ queryKey: ['projects', projectId], queryFn: () => api.getProject(projectId!), retry: false });
   const { data: agents, isLoading, error: agentsError } = useQuery({ queryKey: ['agents', projectId], queryFn: () => api.getProjectAgents(projectId!), retry: false });
@@ -151,6 +154,10 @@ export default function ProjectDetail() {
           {agents && <span className="text-[#6b7280] text-xs">· {agents.length} Agenten</span>}
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => setSettingsOpen(true)} title="Projekt-Einstellungen"
+            className="bg-[#1f2937] hover:bg-[#374151] border border-[#374151] text-white p-2 rounded transition-colors">
+            <Settings2 className="w-4 h-4" />
+          </button>
           <button onClick={() => bulkEnable.mutate(true)} disabled={bulkEnable.isPending}
             className="bg-[#1f2937] hover:bg-emerald-600/20 hover:text-emerald-400 border border-[#374151] text-white text-xs font-bold py-2 px-3 rounded transition-colors disabled:opacity-50">
             Alle aktivieren
@@ -196,6 +203,8 @@ export default function ProjectDetail() {
         onCancel={() => setConfirmRunAll(false)}
         onConfirm={() => { setConfirmRunAll(false); runAll.mutate(); }}
       />
+
+      {settingsOpen && <ProjectParamsEditor project={project} onClose={() => setSettingsOpen(false)} />}
     </div>
   );
 }

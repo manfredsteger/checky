@@ -1,0 +1,15 @@
+{
+  "id": "generic",
+  "name": "Allgemein",
+  "icon": "target",
+  "description": "Freier Check ohne feste Vorlage – Parameter selbst anlegen.",
+  "params": [
+    { "key": "target_price", "label": "Wunschwert", "type": "number", "default": null, "help": "optional – bei Erreichen hervorheben" }
+  ],
+  "result_schema": { "type": "object", "properties": { "value": { "type": "string" } } },
+  "display": { "headline": "value", "chart_field": "value", "target_param": "target_price", "unit": "" },
+  "goal_template": "",
+  "default_schedule": "0 8 * * *",
+  "version": 1,
+  "changelog": ["v1: Erststand"]
+}

@@ -40,8 +40,8 @@ app.get('/api/projects', asyncHandler(async (req, res) => {
 app.post('/api/projects', asyncHandler(async (req, res) => {
   const data = CreateProjectSchema.parse(req.body);
   const result = await query(
-    'INSERT INTO projects (name, description) VALUES ($1, $2) RETURNING *',
-    [data.name, data.description || null]
+    'INSERT INTO projects (name, description, manifest_id, params) VALUES ($1, $2, $3, $4) RETURNING *',
+    [data.name, data.description || null, data.manifest_id || null, JSON.stringify(data.params || {})]
   );
   res.status(201).json(result.rows[0]);
 }));
@@ -61,8 +61,13 @@ app.patch('/api/projects/:id', asyncHandler(async (req, res) => {
   if (current.rowCount === 0) return res.status(404).json({ error: 'Project not found' });
 
   const result = await query(
-    'UPDATE projects SET name = COALESCE($1, name), description = COALESCE($2, description) WHERE id = $3 RETURNING *',
-    [data.name, data.description, id]
+    `UPDATE projects SET
+       name = COALESCE($1, name),
+       description = COALESCE($2, description),
+       manifest_id = COALESCE($3, manifest_id),
+       params = COALESCE($4, params)
+     WHERE id = $5 RETURNING *`,
+    [data.name, data.description, data.manifest_id, data.params ? JSON.stringify(data.params) : null, id]
   );
   res.json(result.rows[0]);
 }));
@@ -319,6 +324,32 @@ app.post('/api/recorder/:sid/confirm', asyncHandler(async (req, res) => {
   );
   await query(`UPDATE recorder_sessions SET status='completed', updated_at=NOW() WHERE id=$1`, [sid]);
   res.status(201).json({ recipe: rec.rows[0], version });
+}));
+
+// --- Manifeste (Tracking-Typ-Vorlagen) ---------------------------------------
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+const MANIFESTS_DIR = process.env.MANIFESTS_DIR || path.join(path.dirname(fileURLToPath(import.meta.url)), '../../../manifests');
+
+function loadManifests(): any[] {
+  try {
+    return fs.readdirSync(MANIFESTS_DIR)
+      .filter(f => f.endsWith('.json'))
+      .map(f => JSON.parse(fs.readFileSync(path.join(MANIFESTS_DIR, f), 'utf-8')))
+      .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  } catch {
+    return [];
+  }
+}
+
+app.get('/api/manifests', asyncHandler(async (req, res) => {
+  res.json(loadManifests());
+}));
+
+app.get('/api/manifests/:id', asyncHandler(async (req, res) => {
+  const m = loadManifests().find(x => x.id === req.params.id);
+  if (!m) return res.status(404).json({ error: 'Manifest not found' });
+  res.json(m);
 }));
 
 // --- Settings & Admin (Schritt 21) -------------------------------------------

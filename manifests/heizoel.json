@@ -1,0 +1,24 @@
+{
+  "id": "heizoel",
+  "name": "Heizölpreis",
+  "icon": "oil",
+  "description": "Heizölpreis für eine Region und Bestellmenge beobachten.",
+  "params": [
+    { "key": "plz", "label": "PLZ", "type": "text", "default": "", "placeholder": "z.B. 85221", "help": "Postleitzahl für die Lieferregion" },
+    { "key": "menge", "label": "Menge (Liter)", "type": "number", "default": 3000, "min": 500, "step": 500 },
+    { "key": "target_price", "label": "Wunschpreis (€/100L)", "type": "number", "default": null, "help": "Bei diesem Preis oder darunter hervorheben" }
+  ],
+  "result_schema": {
+    "type": "object",
+    "properties": {
+      "price_per_100l": { "type": "string" },
+      "total": { "type": "string" },
+      "supplier": { "type": "string" }
+    }
+  },
+  "display": { "headline": "price_per_100l", "chart_field": "price_per_100l", "target_param": "target_price", "unit": "€/100L" },
+  "goal_template": "Heizölpreis für PLZ {{plz}}, Menge {{menge}} Liter. Preis pro 100 Liter + Gesamtpreis + Anbieter auslesen.",
+  "default_schedule": "0 8 * * *",
+  "version": 1,
+  "changelog": ["v1: Erststand — plz/menge/target_price"]
+}
