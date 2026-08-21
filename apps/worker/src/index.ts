@@ -3,7 +3,7 @@ import pg from 'pg';
 import crypto from 'crypto';
 import { executeRecipe } from './executor.js';
 import { ClaudeAgentProvider } from './aiProvider.js';
-import { runRecorderSession } from './recorder.js';
+import { runRecorderSession, runAssistedRecorderSession } from './recorder.js';
 import { enqueueNotification, processOutbox, runCleanup, checkRateLimit } from './notify.js';
 
 const dbUrl = process.env.DB_URL;
@@ -268,8 +268,13 @@ async function handleRecorderJob(job: any) {
     return;
   }
 
-  console.log(`[Worker] Recorder-Session ${session_id} für Agent ${agents[0].name} gestartet`);
-  await runRecorderSession(session_id, agents[0], pool!);
+  const mode = session.mode === 'assisted' ? 'assisted' : 'auto';
+  console.log(`[Worker] Recorder-Session ${session_id} (${mode}) für Agent ${agents[0].name} gestartet`);
+  if (mode === 'assisted') {
+    await runAssistedRecorderSession(session_id, agents[0], pool!);
+  } else {
+    await runRecorderSession(session_id, agents[0], pool!);
+  }
   console.log(`[Worker] Recorder-Session ${session_id} beendet`);
 }
 

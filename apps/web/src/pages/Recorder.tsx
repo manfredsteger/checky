@@ -4,7 +4,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
 
 const STATUS_LABEL: Record<string, string> = {
-  running: 'Läuft…',
+  running: 'Agent arbeitet…',
+  awaiting_instruction: 'Wartet auf Anweisung',
   awaiting_confirm: 'Bereit zur Übernahme',
   completed: 'Übernommen',
   aborted: 'Abgebrochen',
@@ -16,11 +17,12 @@ export default function RecorderPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [sid, setSid] = useState<string | null>(null);
+  const [instr, setInstr] = useState('');
 
   const agentQ = useQuery({ queryKey: ['agent', agentId], queryFn: () => api.getAgent(agentId!), enabled: !!agentId });
 
   const start = useMutation({
-    mutationFn: () => api.startRecorder(agentId!),
+    mutationFn: (mode: 'auto' | 'assisted') => api.startRecorder(agentId!, mode),
     onSuccess: (s) => setSid(s.id),
   });
 
@@ -30,7 +32,7 @@ export default function RecorderPage() {
     enabled: !!sid,
     refetchInterval: (q) => {
       const st = (q.state.data as any)?.status;
-      return st === 'running' || st === 'awaiting_confirm' ? 2000 : false;
+      return st === 'running' || st === 'awaiting_confirm' || st === 'awaiting_instruction' ? 1500 : false;
     },
   });
 
@@ -42,9 +44,19 @@ export default function RecorderPage() {
     mutationFn: () => api.abortRecorder(sid!),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['recorder', sid] }); },
   });
+  const instruct = useMutation({
+    mutationFn: (text: string) => api.instructRecorder(sid!, text),
+    onSuccess: () => { setInstr(''); qc.invalidateQueries({ queryKey: ['recorder', sid] }); },
+    onError: (e) => alert((e as Error).message),
+  });
+  const finish = useMutation({
+    mutationFn: () => api.finishRecorder(sid!),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['recorder', sid] }); },
+  });
 
   const s = session.data as any;
   const status: string | undefined = s?.status;
+  const isAssisted = s?.mode === 'assisted';
 
   return (
     <div className="flex-1 flex flex-col bg-[#0a0a0b] text-white p-6 gap-4 overflow-auto">
@@ -58,17 +70,28 @@ export default function RecorderPage() {
 
       {!sid && (
         <div className="border border-dashed border-[#374151] rounded-xl p-10 text-center">
-          <p className="text-[#9ca3af] mb-4">
-            Ein KI-Agent führt die Recherche einmal selbst im Browser aus (nur auf {agentQ.data?.site}).
-            Du siehst live zu; am Ende wird der Ablauf als deterministisches Recipe gespeichert.
+          <p className="text-[#9ca3af] mb-6 max-w-2xl mx-auto">
+            Ein KI-Agent lernt den Check im Browser an (nur auf {agentQ.data?.site}). Am Ende wird der Ablauf als
+            deterministisches Recipe gespeichert.
           </p>
-          <button
-            onClick={() => start.mutate()}
-            disabled={start.isPending}
-            className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 px-6 py-2 rounded font-semibold"
-          >
-            {start.isPending ? 'Starte…' : 'Anlernen starten'}
-          </button>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center max-w-2xl mx-auto">
+            <div className="flex-1 bg-[#111827] border border-[#1f2937] rounded-xl p-4 text-left">
+              <h3 className="font-semibold mb-1">Autonom</h3>
+              <p className="text-xs text-[#9ca3af] mb-3">Der Agent macht alles selbst in einem Durchlauf. Gut für einfache Seiten.</p>
+              <button onClick={() => start.mutate('auto')} disabled={start.isPending}
+                className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 px-4 py-2 rounded font-semibold">
+                {start.isPending ? 'Starte…' : 'Autonom starten'}
+              </button>
+            </div>
+            <div className="flex-1 bg-[#111827] border border-sky-500/40 rounded-xl p-4 text-left">
+              <h3 className="font-semibold mb-1">Assistiert</h3>
+              <p className="text-xs text-[#9ca3af] mb-3">Du gibst Schritt für Schritt Anweisungen und korrigierst live. Gut für komplexe Formulare (Flüge, Datumswähler).</p>
+              <button onClick={() => start.mutate('assisted')} disabled={start.isPending}
+                className="w-full bg-sky-600 hover:bg-sky-500 disabled:opacity-50 px-4 py-2 rounded font-semibold">
+                {start.isPending ? 'Starte…' : 'Assistiert starten'}
+              </button>
+            </div>
+          </div>
           {start.isError && <p className="text-red-400 text-sm mt-3">{(start.error as Error).message}</p>}
         </div>
       )}
@@ -108,12 +131,38 @@ export default function RecorderPage() {
               {(!s?.events || s.events.length === 0) && <div className="text-[#6b7280]">Noch keine Aktionen…</div>}
             </div>
 
-            {status === 'running' && (
+            {(status === 'running' || status === 'awaiting_instruction') && (
               <button onClick={() => abort.mutate()} className="mt-3 self-start text-sm bg-red-600/80 hover:bg-red-500 px-4 py-2 rounded">
                 Abbrechen
               </button>
             )}
           </div>
+
+          {/* Assistierter Modus: Anweisungs-Eingabe */}
+          {isAssisted && (status === 'awaiting_instruction' || status === 'running') && (
+            <div className="lg:col-span-2 bg-[#111827] border border-sky-500/40 rounded-xl p-4">
+              <h2 className="font-semibold mb-2">Assistiert — nächste Anweisung</h2>
+              {status === 'running' ? (
+                <p className="text-sky-300 text-sm">Der Agent führt deine Anweisung aus… (Screenshot & Aktionen aktualisieren sich)</p>
+              ) : (
+                <div className="flex gap-2">
+                  <input
+                    value={instr}
+                    onChange={e => setInstr(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter' && instr.trim()) instruct.mutate(instr); }}
+                    placeholder="z.B. Trage München ins Von-Feld ein und wähle MUC aus der Vorschlagsliste"
+                    className="flex-1 bg-[#0a0a0b] border border-[#374151] rounded px-3 py-2 text-sm"
+                    autoFocus
+                  />
+                  <button onClick={() => instr.trim() && instruct.mutate(instr)} disabled={instruct.isPending || !instr.trim()}
+                    className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 px-4 py-2 rounded text-sm font-semibold">Senden</button>
+                  <button onClick={() => finish.mutate()} disabled={finish.isPending}
+                    className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 px-4 py-2 rounded text-sm font-semibold">Fertig – Recipe</button>
+                </div>
+              )}
+              <p className="text-xs text-[#6b7280] mt-2">Schritt für Schritt anweisen und korrigieren. Ergebnisfelder benennen (z.B. „lies den Gesamtpreis als price aus"). Am Ende „Fertig – Recipe".</p>
+            </div>
+          )}
 
           {/* Recipe-Vorschau + Übernahme */}
           {status === 'awaiting_confirm' && (

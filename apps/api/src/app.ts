@@ -245,8 +245,9 @@ app.post('/api/agents/:id/recorder', asyncHandler(async (req, res) => {
   const agent = await query('SELECT id FROM agents WHERE id = $1', [id]);
   if (agent.rowCount === 0) return res.status(404).json({ error: 'Agent not found' });
 
+  const mode = req.body?.mode === 'assisted' ? 'assisted' : 'auto';
   const result = await query(
-    `INSERT INTO recorder_sessions (agent_id, status) VALUES ($1, 'running') RETURNING *`, [id]
+    `INSERT INTO recorder_sessions (agent_id, status, mode) VALUES ($1, 'running', $2) RETURNING *`, [id, mode]
   );
   const session = result.rows[0];
 
@@ -266,11 +267,36 @@ app.get('/api/recorder/:sid', asyncHandler(async (req, res) => {
   res.json(result.rows[0]);
 }));
 
+// Assistierter Modus: Nutzer schickt eine Anweisung an die laufende Session.
+app.post('/api/recorder/:sid/instruct', asyncHandler(async (req, res) => {
+  const { sid } = z.object({ sid: z.string().uuid() }).parse(req.params);
+  const { text } = z.object({ text: z.string().min(1) }).parse(req.body);
+  const result = await query(
+    `UPDATE recorder_sessions SET pending_instruction=$2, status='running', updated_at=NOW()
+     WHERE id=$1 AND mode='assisted' AND status IN ('awaiting_instruction','running') RETURNING *`,
+    [sid, text]
+  );
+  if (result.rowCount === 0) return res.status(409).json({ error: 'Session nimmt gerade keine Anweisung an' });
+  res.json(result.rows[0]);
+}));
+
+// Assistierter Modus: Aufnahme beenden -> Recipe destillieren.
+app.post('/api/recorder/:sid/finish', asyncHandler(async (req, res) => {
+  const { sid } = z.object({ sid: z.string().uuid() }).parse(req.params);
+  const result = await query(
+    `UPDATE recorder_sessions SET pending_instruction='__FINISH__', status='running', updated_at=NOW()
+     WHERE id=$1 AND mode='assisted' AND status IN ('awaiting_instruction','running') RETURNING *`,
+    [sid]
+  );
+  if (result.rowCount === 0) return res.status(409).json({ error: 'Session kann nicht abgeschlossen werden' });
+  res.json(result.rows[0]);
+}));
+
 app.post('/api/recorder/:sid/abort', asyncHandler(async (req, res) => {
   const { sid } = z.object({ sid: z.string().uuid() }).parse(req.params);
   const result = await query(
     `UPDATE recorder_sessions SET status='aborted', updated_at=NOW()
-     WHERE id=$1 AND status IN ('running','awaiting_confirm') RETURNING *`, [sid]
+     WHERE id=$1 AND status IN ('running','awaiting_instruction','awaiting_confirm') RETURNING *`, [sid]
   );
   if (result.rowCount === 0) return res.status(404).json({ error: 'Session not found or not abortable' });
   res.json(result.rows[0]);

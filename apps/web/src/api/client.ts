@@ -50,10 +50,12 @@ export const api = {
   },
 
   // Recorder
-  startRecorder: (agentId: string) => fetcher<RecorderSession>(`/agents/${agentId}/recorder`, { method: 'POST' }),
+  startRecorder: (agentId: string, mode: 'auto' | 'assisted' = 'auto') => fetcher<RecorderSession>(`/agents/${agentId}/recorder`, { method: 'POST', body: JSON.stringify({ mode }) }),
   getRecorder: (sid: string) => fetcher<RecorderSession>(`/recorder/${sid}`),
   confirmRecorder: (sid: string) => fetcher<{ version: number }>(`/recorder/${sid}/confirm`, { method: 'POST' }),
   abortRecorder: (sid: string) => fetcher<RecorderSession>(`/recorder/${sid}/abort`, { method: 'POST' }),
+  instructRecorder: (sid: string, text: string) => fetcher<RecorderSession>(`/recorder/${sid}/instruct`, { method: 'POST', body: JSON.stringify({ text }) }),
+  finishRecorder: (sid: string) => fetcher<RecorderSession>(`/recorder/${sid}/finish`, { method: 'POST' }),
 
   // Settings
   getSettings: () => fetcher<AppSettings>('/settings'),
