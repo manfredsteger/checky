@@ -6,6 +6,15 @@ import {defineConfig} from 'vite';
 export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss()],
+    build: {
+      rollupOptions: {
+        output: {
+          // ECharts in einen eigenen Vendor-Chunk (schweres Paket, ändert sich selten
+          // → getrennt cachebar, hält den App-Chunk klein).
+          manualChunks: { echarts: ['echarts'] },
+        },
+      },
+    },
     resolve: {
       dedupe: ['react', 'react-dom'],
       alias: {

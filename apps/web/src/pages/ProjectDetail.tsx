@@ -6,7 +6,8 @@ import { useToast } from '../ui/toast';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { ProjectParamsEditor } from '../ui/ProjectParamsEditor';
 import { AgentParamsEditor } from '../ui/AgentParamsEditor';
-import { Settings2 } from 'lucide-react';
+import { Settings2, LineChart } from 'lucide-react';
+import { ProjectOverview } from '../ui/ProjectOverview';
 import { CronExpressionParser } from 'cron-parser';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -126,6 +127,7 @@ export default function ProjectDetail() {
   const toast = useToast();
   const [confirmRunAll, setConfirmRunAll] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [overviewOpen, setOverviewOpen] = useState(false);
   const [catFilter, setCatFilter] = useState<string | null>(null);
   const [editAgent, setEditAgent] = useState<Agent | null>(null);
 
@@ -192,6 +194,10 @@ export default function ProjectDetail() {
           {agents && <span className="text-[#6b7280] text-xs">· {agents.length} Agenten</span>}
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => setOverviewOpen(o => !o)} title="Projekt-Übersicht (Charts & Statistik)"
+            className={`flex items-center gap-1.5 border text-xs font-bold py-2 px-3 rounded transition-colors ${overviewOpen ? 'bg-emerald-600/20 border-emerald-500/50 text-emerald-400' : 'bg-[#1f2937] hover:bg-[#374151] border-[#374151] text-white'}`}>
+            <LineChart className="w-4 h-4" /> Übersicht
+          </button>
           <button onClick={() => setSettingsOpen(true)} title="Projekt-Einstellungen"
             className="bg-[#1f2937] hover:bg-[#374151] border border-[#374151] text-white p-2 rounded transition-colors">
             <Settings2 className="w-4 h-4" />
@@ -214,6 +220,9 @@ export default function ProjectDetail() {
 
       <section className="flex-1 p-8 overflow-y-auto">
         {project.description && <p className="text-sm text-[#9ca3af] mb-6 max-w-3xl">{project.description}</p>}
+        {overviewOpen && agents && agents.length > 0 && (
+          <ProjectOverview project={project} agents={agents} manifest={manifest} />
+        )}
         {presentCats.length > 1 && (
           <div className="flex flex-wrap gap-2 mb-6">
             <button onClick={() => setCatFilter(null)}

@@ -2,11 +2,13 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { useParams, Link } from 'react-router-dom';
 import { format } from 'date-fns';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Download } from 'lucide-react';
+import type { EChartsOption } from 'echarts';
 import { resolveDisplay, toNumber } from '../lib/resultDisplay';
 import { ResultView } from '../ui/ResultView';
+import { EChart } from '../ui/EChart';
+import { SERIES_COLORS, INK, baseGrid, timeAxis, valueAxis, tooltipStyle, thresholdMarkLine, fmtNum } from '../lib/chartTheme';
 
 export default function AgentResults() {
   const { agentId } = useParams<{ agentId: string }>();
@@ -32,11 +34,46 @@ export default function AgentResults() {
   const numericFields = fields.filter(f => (results ?? []).some(r => toNumber(r.data?.[f]) !== null));
   const activeChart = chartField || resolved.chartField || numericFields.find(f => /price|preis|amount|value|betrag/i.test(f)) || numericFields[0] || '';
 
-  const chartData = results?.slice().reverse().map(r => ({
-    date: format(new Date(r.created_at), 'dd.MM. HH:mm'),
-    [activeChart]: toNumber(r.data?.[activeChart]),
-    raw: r.data?.[activeChart],
-  }));
+  // Zeitreihe [ms, Wert] chronologisch für den ECharts-Zeitachsen-Chart.
+  const chartOption = useMemo<EChartsOption>(() => {
+    const data = (results ?? []).slice().reverse()
+      .map(r => [new Date(r.created_at).getTime(), toNumber(r.data?.[activeChart])] as [number, number | null])
+      .filter(d => d[1] != null);
+    const showThresholds = activeChart === (resolved.chartField || resolved.headlineField);
+    return {
+      color: [SERIES_COLORS[0]],
+      grid: baseGrid(),
+      tooltip: {
+        trigger: 'axis',
+        ...tooltipStyle(),
+        axisPointer: { type: 'line', lineStyle: { color: INK.axis, type: 'dashed' } },
+        formatter: (params: any) => {
+          const p = Array.isArray(params) ? params[0] : params;
+          const ts = p.value[0];
+          const val = p.value[1];
+          return `<div style="font-size:11px;color:${INK.muted};margin-bottom:2px">${format(new Date(ts), 'dd.MM.yyyy HH:mm')}</div>`
+            + `<div><span style="color:${SERIES_COLORS[0]}">●</span> <b>${fmtNum(val)}</b>${resolved.unit ? ` ${resolved.unit}` : ''}</div>`;
+        },
+      },
+      xAxis: timeAxis(),
+      yAxis: valueAxis(resolved.unit),
+      dataZoom: data.length > 24
+        ? [{ type: 'inside' }, { type: 'slider', height: 16, bottom: 2, borderColor: INK.axis, fillerColor: 'rgba(57,135,229,0.12)', textStyle: { color: INK.muted, fontSize: 10 } }]
+        : undefined,
+      series: [{
+        type: 'line',
+        name: activeChart,
+        data,
+        smooth: true,
+        showSymbol: data.length <= 60,
+        symbolSize: 6,
+        lineStyle: { width: 2 },
+        itemStyle: { color: SERIES_COLORS[0] },
+        areaStyle: { color: 'rgba(57,135,229,0.10)' },
+        markLine: showThresholds ? thresholdMarkLine(resolved) : undefined,
+      }],
+    };
+  }, [results, activeChart, resolved]);
 
   const download = (kind: 'csv' | 'json') => {
     if (!results || results.length === 0) return;
@@ -97,29 +134,7 @@ export default function AgentResults() {
                 {numericFields.map(f => <option key={f} value={f}>{f}</option>)}
               </select>
             </div>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1f2937" />
-                  <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#6b7280' }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11, fill: '#6b7280' }} axisLine={false} tickLine={false} width={48} />
-                  <Tooltip
-                    contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: 8, color: '#fff' }}
-                    formatter={(_v: any, _n: any, p: any) => [p?.payload?.raw ?? _v, activeChart]}
-                  />
-                  {resolved.target != null && activeChart === (resolved.chartField || resolved.headlineField) && (
-                    <ReferenceLine y={resolved.target} stroke="#10b981" strokeDasharray="4 4"
-                      label={{ value: `Ziel ${resolved.target}${resolved.unit ? ' ' + resolved.unit : ''}`, position: 'insideTopRight', fill: '#10b981', fontSize: 11 }} />
-                  )}
-                  {resolved.max != null && activeChart === (resolved.chartField || resolved.headlineField) && (
-                    <ReferenceLine y={resolved.max} stroke="#ef4444" strokeDasharray="4 4"
-                      label={{ value: `Grenze ${resolved.max}${resolved.unit ? ' ' + resolved.unit : ''}`, position: 'insideBottomRight', fill: '#ef4444', fontSize: 11 }} />
-                  )}
-                  <Line type="monotone" dataKey={activeChart} stroke="#10b981" strokeWidth={2}
-                    dot={{ r: 3, fill: '#10b981' }} activeDot={{ r: 5 }} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
+            <EChart option={chartOption} height={260} />
           </div>
         )}
 
