@@ -1,11 +1,12 @@
 {
   "id": "heizoel24",
-  "name": "HEIZOEL24",
+  "name": "HEIZOEL24 (API)",
   "manifest_id": "heizoel",
+  "kind": "api",
+  "provider": "heizoel24",
   "icon": "oil",
-  "description": "Heizölpreis pro 100 Liter über HEIZOEL24 für eine PLZ.",
+  "description": "PLZ- und mengengenauer Heizölpreis (€/100L) über heizoel24.de — zuverlässige API-Quelle, kein Anlernen.",
   "site": "https://www.heizoel24.de/",
-  "goal_template": "Auf HEIZOEL24 für PLZ {{plz}} und {{menge}} Liter den Preis pro 100 Liter, den Gesamtpreis und den günstigsten Anbieter auslesen.",
   "default_schedule": "0 8 * * *",
   "version": 1
 }

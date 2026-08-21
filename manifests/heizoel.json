@@ -6,6 +6,7 @@
   "params": [
     { "key": "plz", "label": "PLZ", "type": "text", "default": "", "placeholder": "z.B. 85221", "help": "Postleitzahl für die Lieferregion" },
     { "key": "menge", "label": "Menge (Liter)", "type": "number", "default": 3000, "min": 500, "step": 500 },
+    { "key": "stations", "label": "Abladestellen", "type": "number", "default": 1, "min": 1, "max": 5, "help": "1 = eine Lieferstelle (Standard, günstigster Preis)" },
     { "key": "target_price", "label": "Wunschpreis (€/100L)", "type": "number", "default": null, "help": "Bei diesem Preis oder darunter hervorheben" }
   ],
   "result_schema": {

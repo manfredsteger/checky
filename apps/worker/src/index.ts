@@ -30,6 +30,14 @@ async function start() {
   await boss.start();
   console.log('[Worker] pg-boss started');
 
+  // Geteilte Sofort-Queue für manuelle Trigger: immer registriert, damit neue
+  // Agenten NICHT bis zum nächsten 60s-Scheduler-Poll auf ihre eigene Queue
+  // warten müssen. Cron läuft weiterhin über die per-Agent-Queues.
+  await boss.createQueue('agent-run').catch(() => {});
+  await boss.work('agent-run', { batchSize: 1 }, async (jobs: any[]) => {
+    for (const job of jobs) await handleJob(job);
+  });
+
   // Recorder-Queue: Anlern-Sessions (langlaufend, bis 5 min)
   await boss.createQueue('recorder').catch(() => {});
   await boss.work('recorder', { batchSize: 1 }, async (jobs: any[]) => {

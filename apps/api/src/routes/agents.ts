@@ -109,7 +109,9 @@ agentsRouter.post('/api/agents/:id/trigger', asyncHandler(async (req, res) => {
   }
 
   const result = await query(`INSERT INTO runs (agent_id, status) VALUES ($1, 'queued') RETURNING *`, [id]);
-  await enqueue(`agent-run-${id}`,
+  // Geteilte "agent-run"-Queue: hat immer einen Worker -> sofortiger Lauf,
+  // kein Warten auf die per-Agent-Queue-Registrierung (60s-Poll).
+  await enqueue('agent-run',
     { agent_id: id, run_id: result.rows[0].id, source: 'manual' },
     { retryLimit: 2, retryBackoff: true });
 
