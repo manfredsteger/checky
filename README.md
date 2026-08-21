@@ -119,6 +119,15 @@ Browser │  web   │─/api▶│  api   │─────▶│ PostgreSQL �
 
 ## Quickstart
 
+Erststart in einem Befehl (legt `.env` an, installiert, baut, startet, migriert, seedet):
+
+```bash
+make setup
+# → danach in .env den CLAUDE_CODE_OAUTH_TOKEN eintragen und `make restart`
+```
+
+Oder Schritt für Schritt:
+
 ```bash
 make init                       # npm install (lokal, für Typechecks/Tests)
 cp .env.example .env            # DB_URL passt für Docker; Token eintragen:
@@ -135,6 +144,14 @@ make run-once PROFILE="Bücher-Preis-Check"   # einen Lauf sofort ausführen
 make e2e                                       # End-to-End-Test gegen den Stack
 ```
 
+Nach Code-Änderungen ausrollen (die Images backen den Quellstand ein, kein Live-Mount):
+
+```bash
+make deploy-web    # nur Frontend neu bauen & starten (DB bleibt)
+make rebuild       # alle Images neu bauen & starten (DB bleibt)  — Alias: make deploy
+make complete      # rebuild + migrate + seed (nach größeren Updates)
+```
+
 Optional das Flug-Projekt (17 Quellen) importieren:
 
 ```bash
@@ -143,25 +160,63 @@ make seed-flights               # importiert checky-agents-seed.json
 
 ## Make-Befehle
 
+`make help` zeigt alle Targets gruppiert an (Default-Ziel). Überblick:
+
+**Setup & Lifecycle**
+
 | Befehl | Zweck |
 |---|---|
-| `make help` | Zeigt alle Targets (Default) |
+| `make setup` | Erststart komplett: `.env` anlegen · install · build · up · migrate · seed |
+| `make complete` | Nach Updates: build · up · migrate · seed (**DB bleibt**) |
 | `make init` | Lokale Abhängigkeiten installieren (`npm install`) |
-| `make build` | Alle Docker-Images neu bauen |
-| `make up` / `make down` | Stack starten / stoppen + entfernen |
-| `make reset` | Container **und Volumes** löschen, frisch bauen & starten |
-| `make migrate` | DB-Migrationen ausführen |
-| `make seed` | Demo-Daten einspielen (Bücher-Agent inkl. Recipe) |
-| `make seed-flights` | Flug-Projekt aus `checky-agents-seed.json` importieren |
-| `make run-once PROFILE=<id\|name>` | Einen Lauf sofort ausführen |
-| `make logs` / `make logs-worker` | Container-Logs folgen (alle / nur worker) |
-| `make ps` | Laufende Container auflisten |
-| `make db-shell` | Interaktive PostgreSQL-Shell (`psql`) |
-| `make test` | Unit-Tests |
-| `make e2e` | End-to-End-Tests (Playwright, im worker-Container) |
-| `make lint` | TypeScript-Typecheck über **alle** Pakete |
-| `make clean` | Build-Artefakte + `node_modules` entfernen |
+| `make up` / `make down` | Stack starten / stoppen + entfernen (Volumes bleiben) |
+| `make start` / `make stop` | Container nur stoppen/starten (nicht entfernen) |
+| `make restart` | Container neu erzeugen — „normaler" Neustart (DB & Images bleiben) |
+| `make prod` | Produktions-Stack starten (Alias für `up`) |
+| `make dev` | Frontend lokal mit Hot-Reload (proxyt `/api` auf den laufenden Stack) |
+| `make ps` / `make status` | Container auflisten / Status + Health + Docker-Disk |
 
+**Build & Deploy**
+
+| Befehl | Zweck |
+|---|---|
+| `make build` | Alle Docker-Images neu bauen |
+| `make rebuild` / `make deploy` | Images neu bauen **& starten** (DB bleibt) |
+| `make deploy-web` | Nur den Web-Container neu bauen & starten (Frontend-Änderungen) |
+| `make publish IMAGE_PREFIX=user/checky TAG=1.0` | api/web/worker-Images bauen & in eine Registry pushen |
+
+**Datenbank**
+
+| Befehl | Zweck |
+|---|---|
+| `make migrate` (`make db-push`) | DB-Migrationen ausführen |
+| `make seed` / `make seed-flights` | Demo-Daten / Flug-Projekt einspielen |
+| `make db-shell` (`make shell-db`) | Interaktive PostgreSQL-Shell (`psql`) |
+| `make db-dump [FILE=…]` | DB nach `backups/checky-<zeit>.sql` sichern |
+| `make db-restore FILE=…` | Dump zurückspielen (überschreibt Daten) |
+| `make wait-db` | Warten, bis PostgreSQL bereit ist |
+
+**Reset & Wartung**
+
+| Befehl | Zweck |
+|---|---|
+| `make reset` | Frischer Neustart mit Rebuild — **DB bleibt erhalten** (down → build → up → migrate) |
+| `make reset-hard` (`make nuke`) | **KOMPLETT-Reset: löscht die DB** (Volume), baut & seedet neu — mit Sicherheitsabfrage (`FORCE=1` überspringt sie) |
+| `make prune` | Docker-Disk sicher freigeben (Build-Cache + dangling Images) — **rührt nie Volumes an** |
+| `make clean` | Lokale Build-Artefakte + `node_modules` entfernen |
+
+**Betrieb & Qualität**
+
+| Befehl | Zweck |
+|---|---|
+| `make logs` / `make logs-api` / `make logs-worker` | Container-Logs folgen |
+| `make run-once PROFILE=<id\|name>` | Einen Lauf sofort ausführen |
+| `make test` / `make e2e` / `make lint` | Unit-Tests / E2E (Playwright) / Typecheck über alle Pakete |
+
+> **Reset-Leiter:** `restart` (Container neu, alles bleibt) → `reset` (Rebuild, **DB bleibt**) → `reset-hard`/`nuke` (**DB weg**, neu geseedet). Der destruktive Schritt fragt nach; nur `reset-hard` löscht Daten.
+>
+> **Disk-Full vermeiden:** wiederholte Builds füllen den Docker-Build-Cache — nach Build-Runden `make prune` (gibt Cache + dangling Images frei, lässt Volumes/DB unangetastet). Niemals `docker … prune --volumes` von Hand — das löscht die DB.
+>
 > Podman: allen Targets `COMPOSE="podman-compose"` mitgeben, z.B. `make up COMPOSE="podman-compose"`.
 
 ## Konfiguration (.env)
@@ -290,7 +345,9 @@ blueprints/  Quellen         (git-versioniert, live-gemountet)
 - **Token fehlt / KI failt** — Recorder/Healing brauchen `CLAUDE_CODE_OAUTH_TOKEN` in `.env` (kein `ANTHROPIC_API_KEY` setzen). Token ohne führende Leerzeichen/Quotes.
 - **`--dangerously-skip-permissions`-Fehler** — nicht `permissionMode: bypassPermissions` als root verwenden (bewusst weggelassen).
 - **Podman statt Docker** — alle Targets mit `make COMPOSE="podman-compose" up` usw.
-- **Sauberer Neustart** — `make reset && make migrate && make seed`.
+- **Sauberer Neustart (Daten behalten)** — `make reset` (baut neu & migriert, DB bleibt).
+- **Kompletter Reset (Daten weg)** — `make reset-hard` (löscht die DB, baut & seedet neu; fragt vorher nach).
+- **Docker-Disk voll** — `make prune` (gibt Build-Cache + dangling Images frei; Volumes/DB bleiben unangetastet).
 - **Ports belegt** — Host-Ports 8080 (api) und 8081 (web) in `docker-compose.yml` anpassbar.
 
 ## Playwright-Update-Prozedur
