@@ -156,8 +156,11 @@ export function ProjectOverview({ project, agents, manifest }: {
         name: s.agent.name,
         data: s.points,
         smooth: true,
-        showSymbol: s.points.length <= 40,
-        symbolSize: 5,
+        // Symbole immer zeigen; Serien mit nur EINEM Messwert bekommen einen
+        // deutlich größeren Marker (eine Linie braucht ≥2 Punkte — sonst wirkt
+        // der Einzelwert sonst wie „fehlt").
+        showSymbol: true,
+        symbolSize: s.points.length === 1 ? 11 : 5,
         lineStyle: { width: 2 },
         itemStyle: { color: s.color },
         emphasis: { focus: 'series' as const },
