@@ -1,4 +1,4 @@
-import { Project, Agent, Run, Result, CreateProject, UpdateProject, CreateAgent, UpdateAgent, RecorderSession, AppSettings, UpdateSettings, Manifest } from '@checky/shared';
+import { Project, Agent, Run, Result, CreateProject, UpdateProject, CreateAgent, UpdateAgent, RecorderSession, AppSettings, UpdateSettings, Manifest, Blueprint, CheckyBundle } from '@checky/shared';
 
 const baseUrl = '/api';
 
@@ -57,9 +57,11 @@ export const api = {
   instructRecorder: (sid: string, text: string) => fetcher<RecorderSession>(`/recorder/${sid}/instruct`, { method: 'POST', body: JSON.stringify({ text }) }),
   finishRecorder: (sid: string) => fetcher<RecorderSession>(`/recorder/${sid}/finish`, { method: 'POST' }),
 
-  // Manifeste
+  // Bausteinbibliothek: Manifeste (Tracking-Typen) + Blueprints (Quellen)
   getManifests: () => fetcher<Manifest[]>('/manifests'),
   getManifest: (id: string) => fetcher<Manifest>(`/manifests/${id}`),
+  getBlueprints: (manifestId?: string) => fetcher<Blueprint[]>(`/blueprints${manifestId ? `?manifest_id=${encodeURIComponent(manifestId)}` : ''}`),
+  importBundle: (bundle: CheckyBundle) => fetcher<{ ok: boolean; imported: { manifests: string[]; blueprints: string[] } }>('/library/import', { method: 'POST', body: JSON.stringify(bundle) }),
 
   // Settings
   getSettings: () => fetcher<AppSettings>('/settings'),

@@ -10,6 +10,8 @@ import { CronExpressionParser } from 'cron-parser';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import type { Agent } from '@checky/shared';
+import { resolveDisplay, type Resolved } from '../lib/resultDisplay';
+import { PriceHeadline } from '../ui/PriceHeadline';
 
 const PRIO: Record<number, { label: string; cls: string }> = {
   1: { label: 'P1', cls: 'bg-red-500/15 text-red-300' },
@@ -25,8 +27,8 @@ function nextRunLabel(cron: string, enabled: boolean): string {
   } catch { return 'Ungültiger Cron'; }
 }
 
-function AgentCard({ agent, projectId, onToggle, onTrigger, triggering }: {
-  agent: Agent; projectId: string;
+function AgentCard({ agent, projectId, resolved, onToggle, onTrigger, triggering }: {
+  agent: Agent; projectId: string; resolved: Resolved;
   onToggle: (a: Agent) => void; onTrigger: (id: string) => void; triggering: boolean;
 }) {
   const prio = PRIO[(agent.params as any)?._priority] ?? PRIO[3];
@@ -36,7 +38,9 @@ function AgentCard({ agent, projectId, onToggle, onTrigger, triggering }: {
     staleTime: 15000,
   });
   const last = results?.[0];
-  const fields = last ? Object.keys(last.data || {}).filter(k => !k.startsWith('_')).slice(0, 3) : [];
+  // Manifest-Kennzahl bevorzugt; sonst generische Felder als Fallback.
+  const hasHeadline = !!(last && resolved.headlineField && last.data?.[resolved.headlineField] != null);
+  const fields = last ? Object.keys(last.data || {}).filter(k => !k.startsWith('_') && k !== resolved.headlineField).slice(0, 3) : [];
   const notLearned = agent.has_recipe === false;
 
   return (
@@ -63,11 +67,16 @@ function AgentCard({ agent, projectId, onToggle, onTrigger, triggering }: {
       {/* Letztes Ergebnis */}
       <div className="rounded-lg bg-[#0f151f] border border-[#1f2937] px-3 py-2 min-h-[42px]">
         {last ? (
-          <div className="flex flex-wrap gap-x-3 gap-y-1">
-            {fields.map(f => (
-              <span key={f} className="text-xs"><span className="text-[#6b7280]">{f}:</span> <span className="text-white font-medium">{String(last.data[f])}</span></span>
-            ))}
-            {fields.length === 0 && <span className="text-xs text-[#6b7280]">Ergebnis ohne Felder</span>}
+          <div className="flex flex-col gap-1">
+            {hasHeadline && <PriceHeadline data={last.data} resolved={resolved} size="sm" />}
+            {(fields.length > 0 || !hasHeadline) && (
+              <div className="flex flex-wrap gap-x-3 gap-y-1">
+                {fields.map(f => (
+                  <span key={f} className="text-xs"><span className="text-[#6b7280]">{f}:</span> <span className="text-white font-medium">{String(last.data[f])}</span></span>
+                ))}
+                {fields.length === 0 && !hasHeadline && <span className="text-xs text-[#6b7280]">Ergebnis ohne Felder</span>}
+              </div>
+            )}
           </div>
         ) : notLearned ? (
           <span className="text-xs text-amber-300/90">⚠ Noch nicht angelernt — erst per „Anlernen" ein Recipe aufnehmen, dann kommen Ergebnisse.</span>
@@ -106,6 +115,7 @@ export default function ProjectDetail() {
 
   const { data: project, error: projectError } = useQuery({ queryKey: ['projects', projectId], queryFn: () => api.getProject(projectId!), retry: false });
   const { data: agents, isLoading, error: agentsError } = useQuery({ queryKey: ['agents', projectId], queryFn: () => api.getProjectAgents(projectId!), retry: false });
+  const { data: manifest } = useQuery({ queryKey: ['manifest', project?.manifest_id], queryFn: () => api.getManifest(project!.manifest_id!), enabled: !!project?.manifest_id });
 
   const toggleMutation = useMutation({
     mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) => api.updateAgent(id, { enabled }),
@@ -195,6 +205,7 @@ export default function ProjectDetail() {
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
             {sorted?.map(agent => (
               <AgentCard key={agent.id} agent={agent} projectId={projectId!}
+                resolved={resolveDisplay(manifest, { ...(project.params || {}), ...(agent.params || {}) })}
                 onToggle={(a) => toggleMutation.mutate({ id: a.id, enabled: !a.enabled })}
                 onTrigger={(id) => triggerMutation.mutate(id)}
                 triggering={triggerMutation.isPending} />

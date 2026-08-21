@@ -24,7 +24,7 @@
       "duration": { "type": "string" }
     }
   },
-  "display": { "headline": "price", "chart_field": "price", "target_param": "target_price", "unit": "€" },
+  "display": { "headline": "price", "chart_field": "price", "target_param": "target_price", "max_param": "max_price", "unit": "€" },
   "goal_template": "Flug {{origin}} → {{dest}} ({{outbound}}{% if inbound %} / {{inbound}}{% endif %}), {{adults}} Erwachsene + {{children}} Kinder, {{cabin}}. Günstigsten Gesamtpreis + Airline auslesen.",
   "default_schedule": "0 7 * * *",
   "version": 1,

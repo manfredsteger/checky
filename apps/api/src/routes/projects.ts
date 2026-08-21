@@ -33,14 +33,19 @@ projectsRouter.patch('/api/projects/:id', asyncHandler(async (req, res) => {
   const current = await query('SELECT * FROM projects WHERE id = $1', [id]);
   if (current.rowCount === 0) return res.status(404).json({ error: 'Project not found' });
 
+  // manifest_id/params bewusst per Anwesenheit im Body auswerten (nicht COALESCE),
+  // damit ein explizites null den Typ zurücksetzen kann ("kein Typ").
+  const manifestId = 'manifest_id' in data ? (data.manifest_id || null) : current.rows[0].manifest_id;
+  const params = JSON.stringify('params' in data ? (data.params || {}) : (current.rows[0].params || {}));
+
   const result = await query(
     `UPDATE projects SET
        name = COALESCE($1, name),
        description = COALESCE($2, description),
-       manifest_id = COALESCE($3, manifest_id),
-       params = COALESCE($4, params)
+       manifest_id = $3,
+       params = $4
      WHERE id = $5 RETURNING *`,
-    [data.name, data.description, data.manifest_id, data.params ? JSON.stringify(data.params) : null, id]
+    [data.name, data.description, manifestId, params, id]
   );
   res.json(result.rows[0]);
 }));
