@@ -1,0 +1,11 @@
+{
+  "id": "idealo-flug",
+  "name": "idealo Flug",
+  "manifest_id": "flight",
+  "icon": "plane",
+  "description": "Günstigster Flugpreis über idealo Flug für eine Route.",
+  "site": "https://www.idealo.de/flug/",
+  "goal_template": "Auf idealo Flug den günstigsten Gesamtpreis für {{origin}} → {{dest}} am {{outbound}}{% if inbound %} (Rückflug {{inbound}}){% endif %} für {{adults}} Erwachsene ({{cabin}}) auslesen. Preis, Airline und Anzahl Stopps zurückgeben.",
+  "default_schedule": "0 7 * * *",
+  "version": 1
+}

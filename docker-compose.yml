@@ -25,6 +25,9 @@ services:
       - SCREENSHOT_DIR=/data/screenshots
     volumes:
       - ./data/screenshots:/data/screenshots
+      # Bausteinbibliothek live + persistent (Import/Export schreibt hierher)
+      - ./manifests:/app/manifests
+      - ./blueprints:/app/blueprints
     depends_on:
       db:
         condition: service_healthy

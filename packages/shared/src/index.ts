@@ -42,6 +42,32 @@ export const ManifestSchema = z.object({
 });
 export type Manifest = z.infer<typeof ManifestSchema>;
 
+// --- Blueprints (Quellen-Vorlagen) -------------------------------------------
+// Eine wiederverwendbare Quelle (z.B. „idealo Flug"), die zu einem Manifest
+// gehört und einen fertig vorbereiteten Agenten beschreibt (site + goal).
+export const BlueprintSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  manifest_id: z.string(),
+  icon: z.string().optional(),
+  description: z.string().optional(),
+  site: z.string(),
+  goal_template: z.string().optional(),
+  default_schedule: z.string().optional(),
+  version: z.number().optional(),
+});
+export type Blueprint = z.infer<typeof BlueprintSchema>;
+
+// Ein Bundle bündelt Bausteine (Manifeste/Blueprints) zum Teilen/Import.
+export const CheckyBundleSchema = z.object({
+  kind: z.literal('checky-bundle'),
+  version: z.literal(1),
+  manifests: z.array(ManifestSchema).optional(),
+  blueprints: z.array(BlueprintSchema).optional(),
+  recipes: z.array(z.any()).optional(),
+});
+export type CheckyBundle = z.infer<typeof CheckyBundleSchema>;
+
 export const AgentSchema = z.object({
   id: z.string().uuid(),
   project_id: z.string().uuid(),

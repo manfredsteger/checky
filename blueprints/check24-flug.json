@@ -1,0 +1,11 @@
+{
+  "id": "check24-flug",
+  "name": "Check24 Flug",
+  "manifest_id": "flight",
+  "icon": "plane",
+  "description": "Günstigster Flugpreis über Check24 Flug für eine Route.",
+  "site": "https://flug.check24.de/",
+  "goal_template": "Auf Check24 Flug den günstigsten Gesamtpreis für {{origin}} → {{dest}} am {{outbound}}{% if inbound %} (Rückflug {{inbound}}){% endif %} für {{adults}} Erwachsene ({{cabin}}) auslesen. Preis, Airline und Anzahl Stopps zurückgeben.",
+  "default_schedule": "0 7 * * *",
+  "version": 1
+}
