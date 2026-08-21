@@ -37,11 +37,11 @@
     },
     {
       "name": "idealo Flug MUC→Tokio",
-      "site": "https://www.idealo.de",
-      "goal_text": "Hin- und Rückflug {{origin}}→{{dest_tokyo}} im Mai 2027 (Hin {{outbound}}, Rück {{inbound}}), günstigsten Gesamtpreis + Airline auslesen.",
+      "site": "https://flug.idealo.de/",
+      "goal_text": "Nutze das Flug-Suchformular (Reiseart Hin- und Rückflug). Trage ein: Von {{origin}}, Nach {{dest_tokyo}}, Hinreise {{outbound}}, Rückreise {{inbound}}, {{adults}} Erwachsene und {{children}} Kinder. Klicke Suchen und lies den günstigsten Gesamtpreis und die Airline aus.",
       "schedule_cron": "30 7 * * *",
       "priority": 2,
-      "note": "War nur durch Claude-Freigabesperre (PROVENANCE_REQUIRED) blockiert – mit echtem Browser vermutlich sofort nutzbar."
+      "note": "Flugsuche liegt auf der Subdomain flug.idealo.de (www.idealo.de ist der Shopping-Teil). Mit Stealth erreichbar."
     },
     {
       "name": "billigflieger.de MUC→Tokio",

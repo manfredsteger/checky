@@ -100,6 +100,23 @@ export default function ProjectDetail() {
     onError: (e) => alert((e as Error).message),
   });
 
+  const bulkEnable = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      await Promise.allSettled((agents ?? []).map(a => api.updateAgent(a.id, { enabled })));
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['agents', projectId] }),
+  });
+
+  const runAll = useMutation({
+    mutationFn: async () => {
+      const enabled = (agents ?? []).filter(a => a.enabled);
+      const res = await Promise.allSettled(enabled.map(a => api.triggerAgentRun(a.id)));
+      return { ok: res.filter(r => r.status === 'fulfilled').length, total: enabled.length };
+    },
+    onSuccess: (r) => alert(`${r.ok}/${r.total} Läufe eingereiht.`),
+    onError: (e) => alert((e as Error).message),
+  });
+
   const error = projectError || agentsError;
   if (error) {
     return (
@@ -128,7 +145,21 @@ export default function ProjectDetail() {
           <span className="text-white font-medium">{project.name}</span>
           {agents && <span className="text-[#6b7280] text-xs">· {agents.length} Agenten</span>}
         </div>
-        <Link to={`/projects/${projectId}/agents/new`} className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-2 px-4 rounded transition-colors">+ Neuer Agent</Link>
+        <div className="flex items-center gap-2">
+          <button onClick={() => bulkEnable.mutate(true)} disabled={bulkEnable.isPending}
+            className="bg-[#1f2937] hover:bg-emerald-600/20 hover:text-emerald-400 border border-[#374151] text-white text-xs font-bold py-2 px-3 rounded transition-colors disabled:opacity-50">
+            Alle aktivieren
+          </button>
+          <button onClick={() => bulkEnable.mutate(false)} disabled={bulkEnable.isPending}
+            className="bg-[#1f2937] hover:bg-red-600/20 hover:text-red-300 border border-[#374151] text-white text-xs font-bold py-2 px-3 rounded transition-colors disabled:opacity-50">
+            Alle pausieren
+          </button>
+          <button onClick={() => { if (confirm('Alle aktiven Agenten jetzt ausführen?')) runAll.mutate(); }} disabled={runAll.isPending}
+            className="bg-[#1f2937] hover:bg-[#374151] border border-[#374151] text-white text-xs font-bold py-2 px-3 rounded transition-colors disabled:opacity-50">
+            Alle ausführen
+          </button>
+          <Link to={`/projects/${projectId}/agents/new`} className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-2 px-4 rounded transition-colors">+ Neuer Agent</Link>
+        </div>
       </header>
 
       <section className="flex-1 p-8 overflow-y-auto">
