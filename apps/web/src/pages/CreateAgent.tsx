@@ -2,11 +2,13 @@ import { useState, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
+import { useToast } from '../ui/toast';
 
 export default function CreateAgent() {
   const { projectId } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const toast = useToast();
 
   const [name, setName] = useState('');
   const [site, setSite] = useState('');
@@ -57,9 +59,9 @@ export default function CreateAgent() {
   const createMutation = useMutation({
     mutationFn: () => {
       let schemaObj = {};
-      try { schemaObj = JSON.parse(resultSchema); } catch (e) { alert('Ungültiges JSON im Result-Schema'); throw e; }
+      try { schemaObj = JSON.parse(resultSchema); } catch (e) { toast('error', 'Ungültiges JSON im Result-Schema'); throw e; }
       let paramsObj = {};
-      try { paramsObj = JSON.parse(paramsJson || '{}'); } catch (e) { alert('Ungültiges JSON in den Parametern'); throw e; }
+      try { paramsObj = JSON.parse(paramsJson || '{}'); } catch (e) { toast('error', 'Ungültiges JSON in den Parametern'); throw e; }
 
       return api.createAgent(projectId!, {
         name,

@@ -2,6 +2,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
+import { useToast } from '../ui/toast';
 
 const STATUS_LABEL: Record<string, string> = {
   running: 'Agent arbeitet…',
@@ -16,6 +17,7 @@ export default function RecorderPage() {
   const { projectId, agentId } = useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const toast = useToast();
   const [sid, setSid] = useState<string | null>(null);
   const [instr, setInstr] = useState('');
 
@@ -47,7 +49,7 @@ export default function RecorderPage() {
   const instruct = useMutation({
     mutationFn: (text: string) => api.instructRecorder(sid!, text),
     onSuccess: () => { setInstr(''); qc.invalidateQueries({ queryKey: ['recorder', sid] }); },
-    onError: (e) => alert((e as Error).message),
+    onError: (e) => toast('error', (e as Error).message),
   });
   const finish = useMutation({
     mutationFn: () => api.finishRecorder(sid!),

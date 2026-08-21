@@ -1,6 +1,9 @@
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../api/client';
+import { useToast } from '../ui/toast';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { CronExpressionParser } from 'cron-parser';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -86,6 +89,8 @@ function AgentCard({ agent, projectId, onToggle, onTrigger, triggering }: {
 export default function ProjectDetail() {
   const { projectId } = useParams();
   const queryClient = useQueryClient();
+  const toast = useToast();
+  const [confirmRunAll, setConfirmRunAll] = useState(false);
 
   const { data: project, error: projectError } = useQuery({ queryKey: ['projects', projectId], queryFn: () => api.getProject(projectId!), retry: false });
   const { data: agents, isLoading, error: agentsError } = useQuery({ queryKey: ['agents', projectId], queryFn: () => api.getProjectAgents(projectId!), retry: false });
@@ -96,8 +101,8 @@ export default function ProjectDetail() {
   });
   const triggerMutation = useMutation({
     mutationFn: (id: string) => api.triggerAgentRun(id),
-    onSuccess: () => alert('Run eingereiht!'),
-    onError: (e) => alert((e as Error).message),
+    onSuccess: () => toast('success', 'Lauf eingereiht.'),
+    onError: (e) => toast('error', (e as Error).message),
   });
 
   const bulkEnable = useMutation({
@@ -113,8 +118,8 @@ export default function ProjectDetail() {
       const res = await Promise.allSettled(enabled.map(a => api.triggerAgentRun(a.id)));
       return { ok: res.filter(r => r.status === 'fulfilled').length, total: enabled.length };
     },
-    onSuccess: (r) => alert(`${r.ok}/${r.total} Läufe eingereiht.`),
-    onError: (e) => alert((e as Error).message),
+    onSuccess: (r) => toast('success', `${r.ok}/${r.total} Läufe eingereiht.`),
+    onError: (e) => toast('error', (e as Error).message),
   });
 
   const error = projectError || agentsError;
@@ -154,7 +159,7 @@ export default function ProjectDetail() {
             className="bg-[#1f2937] hover:bg-red-600/20 hover:text-red-300 border border-[#374151] text-white text-xs font-bold py-2 px-3 rounded transition-colors disabled:opacity-50">
             Alle pausieren
           </button>
-          <button onClick={() => { if (confirm('Alle aktiven Agenten jetzt ausführen?')) runAll.mutate(); }} disabled={runAll.isPending}
+          <button onClick={() => setConfirmRunAll(true)} disabled={runAll.isPending}
             className="bg-[#1f2937] hover:bg-[#374151] border border-[#374151] text-white text-xs font-bold py-2 px-3 rounded transition-colors disabled:opacity-50">
             Alle ausführen
           </button>
@@ -181,6 +186,16 @@ export default function ProjectDetail() {
           </div>
         )}
       </section>
+
+      <ConfirmDialog
+        open={confirmRunAll}
+        title="Alle aktiven Agenten ausführen?"
+        message={`Für jeden aktiven Agenten in „${project.name}" wird jetzt ein Lauf eingereiht.`}
+        confirmLabel="Ausführen"
+        loading={runAll.isPending}
+        onCancel={() => setConfirmRunAll(false)}
+        onConfirm={() => { setConfirmRunAll(false); runAll.mutate(); }}
+      />
     </div>
   );
 }

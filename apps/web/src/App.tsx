@@ -8,12 +8,14 @@ import Recorder from './pages/Recorder';
 import RunsList from './pages/RunsList';
 import AgentResults from './pages/AgentResults';
 import Settings from './pages/Settings';
+import { ToastProvider } from './ui/toast';
 
 const queryClient = new QueryClient();
 
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
+      <ToastProvider>
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Layout />}>
@@ -27,6 +29,7 @@ export default function App() {
           <Route path="projects/:projectId/agents/:agentId/recorder" element={<Recorder />} />
         </Routes>
       </BrowserRouter>
+      </ToastProvider>
     </QueryClientProvider>
   );
 }
