@@ -12,6 +12,7 @@ import { de } from 'date-fns/locale';
 import type { Agent } from '@checky/shared';
 import { resolveDisplay, type Resolved } from '../lib/resultDisplay';
 import { PriceHeadline } from '../ui/PriceHeadline';
+import { CATEGORIES, categoryOf } from '../lib/categories';
 
 const PRIO: Record<number, { label: string; cls: string }> = {
   1: { label: 'P1', cls: 'bg-red-500/15 text-red-300' },
@@ -54,6 +55,9 @@ function AgentCard({ agent, projectId, resolved, onToggle, onTrigger, triggering
             : <span className="px-2 py-0.5 bg-[#374151] text-[#9ca3af] text-[10px] font-bold rounded uppercase tracking-wider">Inaktiv</span>}
           {notLearned && <span className="px-2 py-0.5 bg-amber-500/15 text-amber-300 text-[10px] font-bold rounded uppercase tracking-wider">Nicht angelernt</span>}
           {agent.provider && <span className="px-2 py-0.5 bg-sky-500/15 text-sky-300 text-[10px] font-bold rounded uppercase tracking-wider">API · {agent.provider}</span>}
+          {categoryOf((agent.params as any)?._category) && (
+            <span className={`px-2 py-0.5 text-[10px] font-bold rounded uppercase tracking-wider ${categoryOf((agent.params as any)?._category)!.badge}`}>{categoryOf((agent.params as any)?._category)!.label}</span>
+          )}
         </div>
         <button onClick={() => onToggle(agent)} className="text-[10px] bg-[#1f2937] hover:bg-[#374151] px-2 py-1 rounded text-white">
           {agent.enabled ? 'Pausieren' : 'Aktivieren'}
@@ -116,6 +120,7 @@ export default function ProjectDetail() {
   const toast = useToast();
   const [confirmRunAll, setConfirmRunAll] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [catFilter, setCatFilter] = useState<string | null>(null);
 
   const { data: project, error: projectError } = useQuery({ queryKey: ['projects', projectId], queryFn: () => api.getProject(projectId!), retry: false });
   const { data: agents, isLoading, error: agentsError } = useQuery({ queryKey: ['agents', projectId], queryFn: () => api.getProjectAgents(projectId!), retry: false });
@@ -166,6 +171,9 @@ export default function ProjectDetail() {
     const pa = (a.params as any)?._priority ?? 3, pb = (b.params as any)?._priority ?? 3;
     return pa - pb || a.name.localeCompare(b.name);
   });
+  // Vorkommende Kategorien (für die Filterleiste) + gefilterte Sicht
+  const presentCats = CATEGORIES.filter(c => (agents ?? []).some(a => (a.params as any)?._category === c.key));
+  const visible = catFilter ? sorted?.filter(a => (a.params as any)?._category === catFilter) : sorted;
 
   return (
     <div className="flex-1 flex flex-col min-w-0">
@@ -199,6 +207,23 @@ export default function ProjectDetail() {
 
       <section className="flex-1 p-8 overflow-y-auto">
         {project.description && <p className="text-sm text-[#9ca3af] mb-6 max-w-3xl">{project.description}</p>}
+        {presentCats.length > 1 && (
+          <div className="flex flex-wrap gap-2 mb-6">
+            <button onClick={() => setCatFilter(null)}
+              className={`px-3 py-1 rounded text-xs font-semibold border transition-colors ${!catFilter ? 'bg-[#1f2937] border-[#374151] text-white' : 'bg-transparent border-[#1f2937] text-[#9ca3af] hover:text-white'}`}>
+              Alle ({agents?.length ?? 0})
+            </button>
+            {presentCats.map(c => {
+              const n = (agents ?? []).filter(a => (a.params as any)?._category === c.key).length;
+              return (
+                <button key={c.key} onClick={() => setCatFilter(c.key)}
+                  className={`px-3 py-1 rounded text-xs font-semibold border transition-colors ${catFilter === c.key ? c.badge + ' border-transparent' : 'bg-transparent border-[#1f2937] text-[#9ca3af] hover:text-white'}`}>
+                  {c.label} ({n})
+                </button>
+              );
+            })}
+          </div>
+        )}
         {isLoading ? (
           <div className="text-[#6b7280]">Lade Agenten…</div>
         ) : sorted?.length === 0 ? (
@@ -207,7 +232,7 @@ export default function ProjectDetail() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-            {sorted?.map(agent => (
+            {visible?.map(agent => (
               <AgentCard key={agent.id} agent={agent} projectId={projectId!}
                 resolved={resolveDisplay(manifest, { ...(project.params || {}), ...(agent.params || {}) })}
                 onToggle={(a) => toggleMutation.mutate({ id: a.id, enabled: !a.enabled })}

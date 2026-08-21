@@ -1,8 +1,10 @@
 import { useState, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { useToast } from '../ui/toast';
+import type { Blueprint } from '@checky/shared';
+import { CATEGORIES } from '../lib/categories';
 
 export default function CreateAgent() {
   const { projectId } = useParams();
@@ -16,6 +18,24 @@ export default function CreateAgent() {
   const [resultSchema, setResultSchema] = useState('{\n  "value": "string"\n}');
   const [paramsJson, setParamsJson] = useState('{}');
   const [enabled, setEnabled] = useState(false);
+  const [provider, setProvider] = useState<string | null>(null);
+  const [blueprintId, setBlueprintId] = useState('');
+  const [category, setCategory] = useState('price');
+
+  // Blueprints (Quellen-Vorlagen) für den Tracking-Typ des Projekts.
+  const projectQ = useQuery({ queryKey: ['projects', projectId], queryFn: () => api.getProject(projectId!), enabled: !!projectId });
+  const blueprintsQ = useQuery({ queryKey: ['blueprints', projectQ.data?.manifest_id], queryFn: () => api.getBlueprints(projectQ.data?.manifest_id || undefined), enabled: !!projectQ.data });
+
+  const applyBlueprint = (bp: Blueprint | undefined) => {
+    setBlueprintId(bp?.id || '');
+    if (!bp) { setProvider(null); return; }
+    setName(bp.name);
+    setSite(bp.site);
+    setGoal(bp.goal_template || '');
+    setProvider(bp.kind === 'api' ? (bp.provider || null) : null);
+    if (bp.default_schedule) { setScheduleMode('expert'); setExpertCron(bp.default_schedule); }
+    if (bp.kind === 'api') setEnabled(true); // API-Quellen brauchen kein Anlernen -> gleich aktiv
+  };
 
   const SCHEMA_TEMPLATES: Record<string, string> = {
     'Frei': '{\n  "value": "string"\n}',
@@ -60,8 +80,9 @@ export default function CreateAgent() {
     mutationFn: () => {
       let schemaObj = {};
       try { schemaObj = JSON.parse(resultSchema); } catch (e) { toast('error', 'Ungültiges JSON im Result-Schema'); throw e; }
-      let paramsObj = {};
+      let paramsObj: Record<string, any> = {};
       try { paramsObj = JSON.parse(paramsJson || '{}'); } catch (e) { toast('error', 'Ungültiges JSON in den Parametern'); throw e; }
+      if (category) paramsObj._category = category;   // Klassifizierung mitspeichern
 
       return api.createAgent(projectId!, {
         name,
@@ -72,7 +93,8 @@ export default function CreateAgent() {
         params: paramsObj,
         notify: {},
         jitter_min: 0,
-        enabled
+        enabled,
+        provider: provider ?? undefined,
       });
     },
     onSuccess: () => {
@@ -93,6 +115,29 @@ export default function CreateAgent() {
 
       <div className="p-8 max-w-3xl mx-auto w-full overflow-y-auto">
         <h1 className="text-2xl font-bold text-white mb-6">Agent anlegen</h1>
+
+        {(blueprintsQ.data?.length ?? 0) > 0 && (
+          <div className="bg-[#111827] border border-sky-500/30 p-6 rounded-xl mb-6">
+            <h2 className="text-sm font-bold text-white uppercase tracking-wider mb-1">Vorlage (Blueprint)</h2>
+            <p className="text-xs text-[#6b7280] mb-3">Fertige Quelle wählen — füllt URL, Ziel und Zeitplan automatisch. API-Quellen (z.&nbsp;B. Kiwi) brauchen kein Anlernen.</p>
+            <div className="flex flex-wrap gap-2">
+              <button onClick={() => applyBlueprint(undefined)}
+                className={`px-3 py-1.5 rounded text-xs font-semibold border transition-colors ${!blueprintId ? 'bg-[#1f2937] border-[#374151] text-white' : 'bg-transparent border-[#1f2937] text-[#9ca3af] hover:text-white'}`}>
+                Frei / manuell
+              </button>
+              {blueprintsQ.data!.map(bp => (
+                <button key={bp.id} onClick={() => applyBlueprint(bp)}
+                  className={`px-3 py-1.5 rounded text-xs font-semibold border transition-colors flex items-center gap-1.5 ${blueprintId === bp.id ? 'bg-sky-500/15 border-sky-500/50 text-sky-200' : 'bg-transparent border-[#1f2937] text-[#9ca3af] hover:text-white'}`}>
+                  {bp.name}
+                  {bp.kind === 'api' && <span className="px-1 py-0.5 rounded bg-sky-500/20 text-sky-300 text-[9px] uppercase">API</span>}
+                </button>
+              ))}
+            </div>
+            {blueprintId && provider && (
+              <p className="text-xs text-sky-300 mt-3">✓ API-Quelle „{provider}" — kein Anlernen nötig; die Parameter kommen aus den Projekt-Einstellungen (Zahnrad).</p>
+            )}
+          </div>
+        )}
 
         {createMutation.error && (
           <div className="bg-red-900/20 border border-red-500/50 text-red-200 p-4 rounded-xl mb-6">
@@ -122,6 +167,18 @@ export default function CreateAgent() {
             <div>
               <label className="block text-xs font-bold text-[#9ca3af] mb-1">Zielvorgabe (Prompt / Goal)</label>
               <textarea value={goal} onChange={e => setGoal(e.target.value)} className="w-full h-24 bg-[#1f2937] border border-[#374151] rounded px-4 py-2 text-white focus:outline-none focus:border-emerald-500" placeholder="Was soll der Agent auf der Seite tun?" />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-[#9ca3af] mb-1">Kategorie</label>
+              <div className="flex flex-wrap gap-2">
+                {CATEGORIES.map(c => (
+                  <button key={c.key} type="button" onClick={() => setCategory(c.key)}
+                    className={`px-3 py-1.5 rounded text-xs font-semibold border transition-colors ${category === c.key ? c.badge + ' border-transparent' : 'bg-transparent border-[#1f2937] text-[#9ca3af] hover:text-white'}`}>
+                    {c.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 

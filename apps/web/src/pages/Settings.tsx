@@ -29,6 +29,28 @@ export default function SettingsPage() {
   });
   const cleanup = useMutation({ mutationFn: api.runCleanup });
 
+  const [importMsg, setImportMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const importBundle = useMutation({
+    mutationFn: (bundle: any) => api.importBundle(bundle),
+    onSuccess: (r) => {
+      const n = (r.imported.manifests?.length || 0) + (r.imported.blueprints?.length || 0);
+      setImportMsg({ ok: true, text: `${n} Baustein(e) importiert (${[...r.imported.manifests, ...r.imported.blueprints].join(', ')}).` });
+      qc.invalidateQueries({ queryKey: ['manifests'] });
+      qc.invalidateQueries({ queryKey: ['blueprints'] });
+    },
+    onError: (e) => setImportMsg({ ok: false, text: (e as Error).message }),
+  });
+
+  const onImportFile = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      const bundle = JSON.parse(await file.text());
+      importBundle.mutate(bundle);
+    } catch {
+      setImportMsg({ ok: false, text: 'Datei ist kein gültiges JSON.' });
+    }
+  };
+
   const paused = settings.data?.paused ?? false;
 
   return (
@@ -104,6 +126,25 @@ export default function SettingsPage() {
           </div>
           <p className="text-xs text-[#6b7280]">Der jeweils letzte Lauf pro Agent bleibt immer erhalten.</p>
           {cleanup.isSuccess && <p className="text-xs text-emerald-400">Aufräum-Job angestoßen.</p>}
+        </section>
+
+        {/* Bausteinbibliothek */}
+        <section className="rounded-xl p-5 border border-[#1f2937] bg-[#111827] space-y-3">
+          <h2 className="font-semibold">Bausteinbibliothek</h2>
+          <p className="text-sm text-[#9ca3af]">Manifeste (Tracking-Typen) und Blueprints (Quellen) als Bundle sichern oder aus einer Datei einspielen — z.&nbsp;B. aus einem Community-Bundle.</p>
+          <div className="flex flex-wrap items-center gap-3">
+            <a href="/api/library/export" download
+              className="bg-[#1f2937] hover:bg-[#374151] px-4 py-2 rounded text-sm font-semibold inline-flex items-center gap-2">
+              ⬇ Bundle exportieren
+            </a>
+            <label className="bg-[#1f2937] hover:bg-[#374151] px-4 py-2 rounded text-sm font-semibold cursor-pointer inline-flex items-center gap-2">
+              ⬆ Bundle importieren
+              <input type="file" accept="application/json,.json" className="hidden"
+                onChange={e => { onImportFile(e.target.files?.[0]); e.currentTarget.value = ''; }} />
+            </label>
+            {importBundle.isPending && <span className="text-xs text-[#6b7280]">Importiere…</span>}
+          </div>
+          {importMsg && <p className={`text-xs ${importMsg.ok ? 'text-emerald-400' : 'text-red-400'}`}>{importMsg.text}</p>}
         </section>
 
         {(save.isError) && <p className="text-red-400 text-sm">{(save.error as Error).message}</p>}
