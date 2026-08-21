@@ -12,7 +12,7 @@ import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import type { Agent } from '@checky/shared';
 import { resolveDisplay, type Resolved } from '../lib/resultDisplay';
-import { PriceHeadline } from '../ui/PriceHeadline';
+import { ResultView } from '../ui/ResultView';
 import { CATEGORIES, categoryOf } from '../lib/categories';
 
 const PRIO: Record<number, { label: string; cls: string }> = {
@@ -80,17 +80,16 @@ function AgentCard({ agent, projectId, resolved, onToggle, onTrigger, onEdit, tr
       {/* Letztes Ergebnis */}
       <div className="rounded-lg bg-[#0f151f] border border-[#1f2937] px-3 py-2 min-h-[42px]">
         {last ? (
-          <div className="flex flex-col gap-1">
-            {hasHeadline && <PriceHeadline data={last.data} resolved={resolved} size="sm" />}
-            {(fields.length > 0 || !hasHeadline) && (
-              <div className="flex flex-wrap gap-x-3 gap-y-1">
-                {fields.map(f => (
-                  <span key={f} className="text-xs"><span className="text-[#6b7280]">{f}:</span> <span className="text-white font-medium">{String(last.data[f])}</span></span>
-                ))}
-                {fields.length === 0 && !hasHeadline && <span className="text-xs text-[#6b7280]">Ergebnis ohne Felder</span>}
-              </div>
-            )}
-          </div>
+          hasHeadline ? (
+            <ResultView results={results} resolved={resolved} size="sm" />
+          ) : (
+            <div className="flex flex-wrap gap-x-3 gap-y-1">
+              {fields.map(f => (
+                <span key={f} className="text-xs"><span className="text-[#6b7280]">{f}:</span> <span className="text-white font-medium">{String(last.data[f])}</span></span>
+              ))}
+              {fields.length === 0 && <span className="text-xs text-[#6b7280]">Ergebnis ohne Felder</span>}
+            </div>
+          )
         ) : notLearned ? (
           <span className="text-xs text-amber-300/90">⚠ Noch nicht angelernt — erst per „Anlernen" ein Recipe aufnehmen, dann kommen Ergebnisse.</span>
         ) : (

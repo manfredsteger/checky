@@ -17,7 +17,14 @@
       "supplier": { "type": "string" }
     }
   },
-  "display": { "headline": "price_per_100l", "chart_field": "price_per_100l", "target_param": "target_price", "unit": "€/100L" },
+  "display": {
+    "headline": "price_per_100l", "chart_field": "price_per_100l", "target_param": "target_price", "unit": "€/100L",
+    "trend_good": "down",
+    "secondary": [
+      { "field": "total", "label": "gesamt", "suffix": " €" },
+      { "field": "supplier" }
+    ]
+  },
   "goal_template": "Heizölpreis für PLZ {{plz}}, Menge {{menge}} Liter. Preis pro 100 Liter + Gesamtpreis + Anbieter auslesen.",
   "default_schedule": "0 8 * * *",
   "version": 1,

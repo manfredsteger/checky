@@ -7,12 +7,16 @@ import type { Manifest } from '@checky/shared';
 // konkrete Anzeigewerte — ohne dass die UI etwas über „Flug" oder „Heizöl"
 // wissen muss.
 
+export interface SecondaryField { field: string; label?: string; suffix?: string; }
+
 export interface DisplayConfig {
   headline?: string;      // Ergebnis-Feld, das als Kennzahl gezeigt wird
   chart_field?: string;   // Ergebnis-Feld für den Verlaufs-Chart
   target_param?: string;  // Param-Key: Wunschpreis (<= gut)
   max_param?: string;     // Param-Key: Schmerzgrenze (> teuer)
   unit?: string;          // z.B. "€"
+  secondary?: SecondaryField[];  // zusätzliche Felder als Chips
+  trend_good?: 'up' | 'down';    // welche Richtung ist "gut" (bei Preisen: down)
 }
 
 export type Verdict = 'good' | 'ok' | 'high' | 'neutral';
@@ -23,6 +27,8 @@ export interface Resolved {
   unit?: string;
   target: number | null;
   max: number | null;
+  secondary: SecondaryField[];
+  trendGood: 'up' | 'down';
 }
 
 // Zahl aus gemischten Strings ("£51.77", "1.234,50 €") robust parsen.
@@ -46,7 +52,19 @@ export function resolveDisplay(manifest: Manifest | undefined, params: Record<st
     unit: d.unit,
     target: num(d.target_param),
     max: num(d.max_param),
+    secondary: Array.isArray(d.secondary) ? d.secondary : [],
+    trendGood: d.trend_good === 'up' ? 'up' : 'down',
   };
+}
+
+// Trend der Kennzahl: neuester vs. vorheriger Ergebniswert.
+export interface Trend { dir: 'up' | 'down' | 'flat'; deltaPct: number | null; good: boolean; }
+export function trendOf(latest: number | null, previous: number | null, trendGood: 'up' | 'down'): Trend | null {
+  if (latest == null || previous == null || previous === 0) return null;
+  const diff = latest - previous;
+  const dir: Trend['dir'] = diff > 0 ? 'up' : diff < 0 ? 'down' : 'flat';
+  if (dir === 'flat') return { dir, deltaPct: 0, good: true };
+  return { dir, deltaPct: Math.abs(diff / previous) * 100, good: dir === trendGood };
 }
 
 // Kennzahl gegen Wunsch-/Schmerzgrenze bewerten.

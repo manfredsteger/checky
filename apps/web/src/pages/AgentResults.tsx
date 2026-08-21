@@ -6,7 +6,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { useState } from 'react';
 import { Download } from 'lucide-react';
 import { resolveDisplay, toNumber } from '../lib/resultDisplay';
-import { PriceHeadline } from '../ui/PriceHeadline';
+import { ResultView } from '../ui/ResultView';
 
 export default function AgentResults() {
   const { agentId } = useParams<{ agentId: string }>();
@@ -77,7 +77,7 @@ export default function AgentResults() {
         {latest && resolved.headlineField && latest.data?.[resolved.headlineField] != null && (
           <div className="bg-[#111827] border border-[#1f2937] rounded-xl p-5">
             <div className="text-xs uppercase tracking-wider text-[#6b7280] mb-1">Aktuell</div>
-            <PriceHeadline data={latest.data} resolved={resolved} size="lg" />
+            <ResultView results={results} resolved={resolved} size="lg" />
             <div className="text-[11px] text-[#6b7280] mt-1">Stand {format(new Date(latest.created_at), 'dd.MM.yy HH:mm')} Uhr</div>
           </div>
         )}

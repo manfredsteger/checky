@@ -26,7 +26,16 @@
       "duration": { "type": "string" }
     }
   },
-  "display": { "headline": "price", "chart_field": "price", "target_param": "target_price", "max_param": "max_price", "unit": "€" },
+  "display": {
+    "headline": "price", "chart_field": "price", "target_param": "target_price", "max_param": "max_price", "unit": "€",
+    "trend_good": "down",
+    "secondary": [
+      { "field": "airline" },
+      { "field": "stops" },
+      { "field": "duration_out_h", "label": "Hin", "suffix": " h" },
+      { "field": "duration_in_h", "label": "Rück", "suffix": " h" }
+    ]
+  },
   "goal_template": "Flug {{origin}} → {{dest}} ({{outbound}}{% if inbound %} / {{inbound}}{% endif %}), {{adults}} Erwachsene + {{children}} Kinder, {{cabin}}. Günstigsten Gesamtpreis + Airline auslesen.",
   "default_schedule": "0 7 * * *",
   "version": 1,
