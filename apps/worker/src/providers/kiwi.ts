@@ -20,14 +20,40 @@ const CITY_ALIASES: Record<string, string> = {
   london: 'City:london_gb', paris: 'City:paris_fr', wien: 'City:vienna_at',
 };
 
-function resolveLocation(input: string): string {
+const PLACES_QUERY = `query P($search: PlacesSearchInput, $options: PlacesOptionsInput) {
+  places(search: $search, options: $options) {
+    ... on PlaceConnection { edges { node { __typename id } } }
+  }
+}`;
+
+// Beliebigen Ort auflösen: IATA/„City:"/„Station:" direkt; sonst per Kiwi-
+// Places-Query (bevorzugt die Stadt = alle Flughäfen). Alias-Liste nur als
+// Offline-Fallback, falls die Query mal nicht erreichbar ist.
+async function resolveLocation(input: string): Promise<string> {
   const v = (input || '').trim();
   if (!v) throw new Error('Kiwi: leerer Ort');
   if (v.includes(':')) return v;                         // schon eine Kiwi-ID
   if (/^[A-Za-z]{3}$/.test(v)) return `Station:airport:${v.toUpperCase()}`; // IATA
+
+  try {
+    const res = await fetch(`${ENDPOINT}?featureName=PlacesQuery`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'kw-skypicker-visitor-uniqid': VISITOR },
+      body: JSON.stringify({ query: PLACES_QUERY, variables: { search: { term: v }, options: { locale: 'en' } } }),
+    });
+    if (res.ok) {
+      const json: any = await res.json();
+      const nodes: any[] = (json?.data?.places?.edges || []).map((e: any) => e.node).filter((n: any) => n?.id);
+      const city = nodes.find(n => n.__typename === 'City');
+      const station = nodes.find(n => n.__typename === 'Station');
+      const pick = city || station || nodes[0];
+      if (pick?.id) return pick.id;
+    }
+  } catch { /* Fallback unten */ }
+
   const alias = CITY_ALIASES[v.toLowerCase()];
   if (alias) return alias;
-  throw new Error(`Kiwi: Ort "${v}" nicht auflösbar — IATA-Code oder bekannte Stadt nutzen`);
+  throw new Error(`Kiwi: Ort "${v}" nicht auflösbar`);
 }
 
 const dayRange = (d: string) => ({ start: `${d}T00:00:00`, end: `${d}T23:59:59` });
@@ -71,8 +97,8 @@ function sectorInfo(sec: any) {
 }
 
 export async function fetchKiwi(params: Record<string, any>): Promise<Record<string, any>> {
-  const source = resolveLocation(params.origin);
-  const destination = resolveLocation(params.dest);
+  const source = await resolveLocation(params.origin);
+  const destination = await resolveLocation(params.dest);
   const adults = Number(params.adults) || 1;
   const children = Number(params.children) || 0;
   const infants = Number(params.infants) || 0;
