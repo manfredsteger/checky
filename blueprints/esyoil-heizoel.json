@@ -1,0 +1,12 @@
+{
+  "id": "esyoil-heizoel",
+  "name": "esyoil Heizöl (API)",
+  "manifest_id": "heizoel",
+  "kind": "api",
+  "provider": "esyoil",
+  "icon": "oil",
+  "description": "Nationaler Heizölpreis (€/100L) über esyoil — zuverlässige API-Quelle, kein Anlernen. PLZ-genau folgt später.",
+  "site": "https://www.esyoil.com/",
+  "default_schedule": "0 8 * * *",
+  "version": 1
+}
