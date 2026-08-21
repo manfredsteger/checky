@@ -5,6 +5,7 @@ import { api } from '../api/client';
 import { useToast } from '../ui/toast';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { ProjectParamsEditor } from '../ui/ProjectParamsEditor';
+import { AgentParamsEditor } from '../ui/AgentParamsEditor';
 import { Settings2 } from 'lucide-react';
 import { CronExpressionParser } from 'cron-parser';
 import { format } from 'date-fns';
@@ -28,9 +29,9 @@ function nextRunLabel(cron: string, enabled: boolean): string {
   } catch { return 'Ungültiger Cron'; }
 }
 
-function AgentCard({ agent, projectId, resolved, onToggle, onTrigger, triggering }: {
+function AgentCard({ agent, projectId, resolved, onToggle, onTrigger, onEdit, triggering }: {
   agent: Agent; projectId: string; resolved: Resolved;
-  onToggle: (a: Agent) => void; onTrigger: (id: string) => void; triggering: boolean;
+  onToggle: (a: Agent) => void; onTrigger: (id: string) => void; onEdit: (a: Agent) => void; triggering: boolean;
 }) {
   const prio = PRIO[(agent.params as any)?._priority] ?? PRIO[3];
   const { data: results } = useQuery({
@@ -59,9 +60,15 @@ function AgentCard({ agent, projectId, resolved, onToggle, onTrigger, triggering
             <span className={`px-2 py-0.5 text-[10px] font-bold rounded uppercase tracking-wider ${categoryOf((agent.params as any)?._category)!.badge}`}>{categoryOf((agent.params as any)?._category)!.label}</span>
           )}
         </div>
-        <button onClick={() => onToggle(agent)} className="text-[10px] bg-[#1f2937] hover:bg-[#374151] px-2 py-1 rounded text-white">
-          {agent.enabled ? 'Pausieren' : 'Aktivieren'}
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button onClick={() => onEdit(agent)} title="Agent bearbeiten"
+            className="text-[#6b7280] hover:text-white bg-[#1f2937] hover:bg-[#374151] p-1.5 rounded">
+            <Settings2 className="w-3.5 h-3.5" />
+          </button>
+          <button onClick={() => onToggle(agent)} className="text-[10px] bg-[#1f2937] hover:bg-[#374151] px-2 py-1 rounded text-white">
+            {agent.enabled ? 'Pausieren' : 'Aktivieren'}
+          </button>
+        </div>
       </div>
 
       <div>
@@ -121,6 +128,7 @@ export default function ProjectDetail() {
   const [confirmRunAll, setConfirmRunAll] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [catFilter, setCatFilter] = useState<string | null>(null);
+  const [editAgent, setEditAgent] = useState<Agent | null>(null);
 
   const { data: project, error: projectError } = useQuery({ queryKey: ['projects', projectId], queryFn: () => api.getProject(projectId!), retry: false });
   const { data: agents, isLoading, error: agentsError } = useQuery({ queryKey: ['agents', projectId], queryFn: () => api.getProjectAgents(projectId!), retry: false });
@@ -237,6 +245,7 @@ export default function ProjectDetail() {
                 resolved={resolveDisplay(manifest, { ...(project.params || {}), ...(agent.params || {}) })}
                 onToggle={(a) => toggleMutation.mutate({ id: a.id, enabled: !a.enabled })}
                 onTrigger={(id) => triggerMutation.mutate(id)}
+                onEdit={setEditAgent}
                 triggering={triggerMutation.isPending} />
             ))}
           </div>
@@ -254,6 +263,7 @@ export default function ProjectDetail() {
       />
 
       {settingsOpen && <ProjectParamsEditor project={project} onClose={() => setSettingsOpen(false)} />}
+      {editAgent && <AgentParamsEditor agent={editAgent} manifest={manifest} projectParams={project.params} onClose={() => setEditAgent(null)} />}
     </div>
   );
 }

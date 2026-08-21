@@ -20,12 +20,13 @@ export async function fetchEsyoil(params: Record<string, any>): Promise<Record<s
   const menge = Number(params.menge) > 0 ? Number(params.menge) : null;
   const total = menge != null ? Math.round(per100 * menge / 100 * 100) / 100 : null;
 
+  // Bewusst OHNE plz: esyoil liefert den Bundesdurchschnitt, die PLZ fließt
+  // nicht ein — sie hier zu zeigen wäre irreführend.
   return {
     price_per_100l: per100,
     ...(total != null ? { total } : {}),
     unit: '€/100L',
     supplier: 'esyoil (Bundesdurchschnitt)',
     date: String(latest.date || '').slice(0, 10),
-    ...(params.plz ? { plz: String(params.plz) } : {}),
   };
 }
