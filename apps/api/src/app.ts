@@ -85,7 +85,9 @@ app.get('/api/projects/:id/agents', asyncHandler(async (req, res) => {
   const project = await query('SELECT id FROM projects WHERE id = $1', [id]);
   if (project.rowCount === 0) return res.status(404).json({ error: 'Project not found' });
 
-  const result = await query('SELECT * FROM agents WHERE project_id = $1 ORDER BY created_at DESC', [id]);
+  const result = await query(
+    `SELECT a.*, EXISTS(SELECT 1 FROM recipes r WHERE r.agent_id = a.id) AS has_recipe
+     FROM agents a WHERE a.project_id = $1 ORDER BY a.created_at DESC`, [id]);
   res.json(result.rows);
 }));
 
@@ -107,7 +109,9 @@ app.post('/api/projects/:id/agents', asyncHandler(async (req, res) => {
 // Flat Agents
 app.get('/api/agents/:id', asyncHandler(async (req, res) => {
   const { id } = IdParamSchema.parse(req.params);
-  const result = await query('SELECT * FROM agents WHERE id = $1', [id]);
+  const result = await query(
+    `SELECT a.*, EXISTS(SELECT 1 FROM recipes r WHERE r.agent_id = a.id) AS has_recipe
+     FROM agents a WHERE a.id = $1`, [id]);
   if (result.rowCount === 0) return res.status(404).json({ error: 'Agent not found' });
   res.json(result.rows[0]);
 }));

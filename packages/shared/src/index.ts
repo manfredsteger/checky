@@ -54,6 +54,7 @@ export const AgentSchema = z.object({
   enabled: z.boolean().default(true),
   notify: z.record(z.string(), z.any()).nullable().default({}),
   result_schema: z.record(z.string(), z.any()).nullable().default({}),
+  has_recipe: z.boolean().optional(),   // wird von der API mitgeliefert (nicht in DB)
   created_at: z.coerce.date(),
 });
 export type Agent = z.infer<typeof AgentSchema>;
