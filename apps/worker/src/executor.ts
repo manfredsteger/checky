@@ -5,10 +5,11 @@ import { jsonSchemaToZod, type AIProvider } from '@checky/shared';
 import { launchBrowser, createContext } from './browser.js';
 
 export interface Step {
-  action: 'goto' | 'click' | 'fill' | 'select' | 'waitFor' | 'extract';
+  action: 'goto' | 'click' | 'fill' | 'select' | 'waitFor' | 'extract' | 'press';
   selector?: string;
   url?: string;
   value?: string;
+  key?: string;
   optional?: boolean;
   note?: string;
   mode?: 'dom_map' | 'ai_json';
@@ -188,7 +189,18 @@ export async function executeRecipe(
       } else if (step.action === 'fill' && step.selector && step.value !== undefined) {
         const loc = getLocator(page!, substitute(step.selector, agent.params));
         await checkGuardrails(loc, 'fill');
-        await loc.fill(substitute(step.value, agent.params));
+        // Symmetrisch zum Recorder: echte Tastenanschläge, damit Autocomplete-
+        // Listen auch beim Abspielen aufgehen und aufgezeichnete press-Schritte
+        // (ArrowDown/Enter) den Vorschlag übernehmen.
+        await loc.first().click();
+        try { await loc.first().fill(''); } catch { /* ignore */ }
+        await loc.first().pressSequentially(substitute(step.value, agent.params), { delay: 40 });
+      } else if (step.action === 'press' && step.key) {
+        if (step.selector) {
+          await getLocator(page!, substitute(step.selector, agent.params)).first().press(step.key);
+        } else {
+          await page!.keyboard.press(step.key);
+        }
       } else if (step.action === 'waitFor' && step.selector) {
         await getLocator(page!, substitute(step.selector, agent.params)).waitFor({ state: 'visible' });
       } else if (step.action === 'extract') {

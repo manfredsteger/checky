@@ -42,7 +42,7 @@ function err(text: string) {
 function buildRecorderServer(getPage: () => Page, ctx: RecorderCtx) {
   const budgetGuard = () => {
     if (ctx.aborted) return err('Session abgebrochen.');
-    if (ctx.events.filter(e => ['navigate', 'click', 'type', 'extract_field'].includes(e.tool)).length >= ctx.actionBudget) {
+    if (ctx.events.filter(e => ['navigate', 'click', 'type', 'press', 'extract_field'].includes(e.tool)).length >= ctx.actionBudget) {
       return err('Aktions-Budget erschöpft. Bitte jetzt mit report_result abschließen.');
     }
     return null;
@@ -106,7 +106,7 @@ function buildRecorderServer(getPage: () => Page, ctx: RecorderCtx) {
 
   const type = tool(
     'type',
-    'Tippe Text in ein Eingabefeld (kein Passwort-/Zahlungsfeld).',
+    'Tippe Text in ein Eingabefeld (kein Passwort-/Zahlungsfeld). Löscht vorhandenen Inhalt und tippt mit echten Tastenanschlägen — löst dadurch Autocomplete-/Vorschlagslisten aus.',
     { selector: z.string(), text: z.string() },
     async (args: any) => {
       const g = budgetGuard(); if (g) return g;
@@ -116,9 +116,29 @@ function buildRecorderServer(getPage: () => Page, ctx: RecorderCtx) {
         const ac = await loc.getAttribute('autocomplete');
         if (t === 'password' || (ac && /^cc-/.test(ac))) return err('Blockiert: Passwort-/Zahlungsfeld.');
       } catch { /* ignore */ }
-      await loc.fill(args.text);
+      // Echte Tastenanschläge statt fill(): fokussieren, leeren, sequentiell tippen.
+      // Viele Suchfelder (Flughäfen, PLZ) öffnen ihre Vorschlagsliste nur so.
+      await loc.click();
+      try { await loc.fill(''); } catch { /* manche Felder mögen kein fill('') */ }
+      await loc.pressSequentially(args.text, { delay: 50 });
       ctx.events.push({ ts: Date.now(), tool: 'type', input: { selector: args.selector, text: args.text } });
-      return ok(`Getippt in ${args.selector}`);
+      return ok(`Getippt in ${args.selector} (echte Tasten, Vorschläge sollten offen sein — mit snapshot prüfen, dann press ArrowDown/Enter oder click auf den Vorschlag)`);
+    }
+  );
+
+  const press = tool(
+    'press',
+    'Drücke eine Taste — z.B. Enter, ArrowDown, ArrowUp, Tab, Escape. Ideal für Autocomplete-Listen (ArrowDown dann Enter) und Datepicker. Mit optionalem Selektor wird die Taste auf diesem Element ausgelöst, sonst global.',
+    { key: z.string().describe("Taste, z.B. 'ArrowDown', 'Enter', 'Tab', 'Escape'"), selector: z.string().optional().describe('optional: Element, das die Taste erhält') },
+    async (args: any) => {
+      const g = budgetGuard(); if (g) return g;
+      if (args.selector) {
+        await getLocator(getPage(), args.selector).first().press(args.key);
+      } else {
+        await getPage().keyboard.press(args.key);
+      }
+      ctx.events.push({ ts: Date.now(), tool: 'press', input: { key: args.key, selector: args.selector } });
+      return ok(`Taste gedrückt: ${args.key}${args.selector ? ' auf ' + args.selector : ''}`);
     }
   );
 
@@ -152,7 +172,7 @@ function buildRecorderServer(getPage: () => Page, ctx: RecorderCtx) {
   return createSdkMcpServer({
     name: 'recorder',
     version: '1.0.0',
-    tools: [snapshot, navigate, click, type, readText, extractField],
+    tools: [snapshot, navigate, click, type, press, readText, extractField],
   });
 }
 
@@ -183,6 +203,8 @@ export function distillRecipe(
       steps.push(step);
     } else if (e.tool === 'type') {
       steps.push({ action: 'fill', selector: e.input.selector, value: paramize(e.input.text, params) });
+    } else if (e.tool === 'press') {
+      steps.push({ action: 'press', key: e.input.key, ...(e.input.selector ? { selector: e.input.selector } : {}) });
     }
   }
   // Extraktion als dom_map (mit ai_json-Fallback, falls Selektoren brechen).
