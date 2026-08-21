@@ -57,9 +57,17 @@ fragment sec on Sector { duration sectorSegments { segment {
 function sectorInfo(sec: any) {
   const segs = sec.sectorSegments || [];
   const codes = segs.map((s: any) => s.segment.source.station.code);
-  if (segs.length) codes.push(segs[segs.length - 1].segment.destination.station.code);
+  const to = segs.length ? segs[segs.length - 1].segment.destination.station.code : '';
+  if (to) codes.push(to);
   const carriers = Array.from(new Set(segs.map((s: any) => s.segment.carrier.name)));
-  return { stops: Math.max(0, segs.length - 1), durationH: Math.round(sec.duration / 360) / 10, route: codes.join('–'), carriers };
+  return {
+    stops: Math.max(0, segs.length - 1),
+    durationH: Math.round(sec.duration / 360) / 10,
+    route: codes.join('–'),
+    from: codes[0] || '',
+    to,
+    carriers,
+  };
 }
 
 export async function fetchKiwi(params: Record<string, any>): Promise<Record<string, any>> {
@@ -69,7 +77,7 @@ export async function fetchKiwi(params: Record<string, any>): Promise<Record<str
   const children = Number(params.children) || 0;
   const infants = Number(params.infants) || 0;
   const pax = Math.max(1, adults + children);
-  const maxStops = params.max_stops != null && params.max_stops !== '' ? Number(params.max_stops) : 0;
+  const maxStops = params.max_stops != null && params.max_stops !== '' ? Number(params.max_stops) : 1;
   const maxDurH = params.max_duration_h != null && params.max_duration_h !== '' ? Number(params.max_duration_h) : null;
   const cabin = CABIN[String(params.cabin || 'economy').toLowerCase()] || 'ECONOMY';
   const isReturn = !!params.inbound;
@@ -115,7 +123,11 @@ export async function fetchKiwi(params: Record<string, any>): Promise<Record<str
   if (!pick) throw new Error(`Kiwi: kein Flug ≤ ${maxDurH}h Reisezeit gefunden`);
 
   const airlines = Array.from(new Set([...pick.out.carriers, ...(pick.inb?.carriers || [])])).join(', ');
-  const bookingUrl = `https://www.kiwi.com/en/search/results/${encodeURIComponent(params.origin)}/${encodeURIComponent(params.dest)}/${params.outbound}${isReturn ? '/' + params.inbound : ''}`;
+  // Deeplink aus den echten Flughafen-Codes des gewählten Flugs (robuster als
+  // der freie dest-Text, der als Städtename keine gültige Kiwi-URL ergäbe).
+  const from = pick.out.from || 'MUC';
+  const to = pick.out.to || '';
+  const bookingUrl = `https://www.kiwi.com/en/search/results/${from}/${to}/${params.outbound}${isReturn ? '/' + params.inbound : ''}`;
 
   return {
     price: Math.round(pick.total / pax),          // pro Person (Kennzahl fürs Manifest)
