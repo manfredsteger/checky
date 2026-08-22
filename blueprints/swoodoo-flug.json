@@ -70,7 +70,7 @@
         "stops": {
           "selector": "[class*=\"JWEO\"]",
           "index": 0,
-          "regex": "(Direkt|\\d+\\s*Stopp\\w*)"
+          "regex": "(Direkt|\\d+\\s*Stopps?)"
         }
       }
     }

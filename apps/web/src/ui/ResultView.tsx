@@ -6,8 +6,12 @@ import { headlineValue, verdictFor, VERDICT_STYLE, toNumber, trendOf } from '../
 function fmt(field: string, value: any): string {
   if (value == null || value === '') return '—';
   if (field === 'stops') {
-    const n = Number(value);
-    return n === 0 ? 'Direktflug' : `${n} Stopp${n > 1 ? 's' : ''}`;
+    // Quellen liefern hier mal eine Zahl (0/1/2), mal Text ("1 Stopp", "Direkt").
+    // Nur bei einer echten Zahl selbst formatieren, sonst den Text durchreichen —
+    // Number("1 Stopp") wäre NaN und stand vorher so auf der Karte.
+    const n = typeof value === 'number' ? value : Number(String(value).trim());
+    if (Number.isFinite(n)) return n === 0 ? 'Direktflug' : `${n} Stopp${n > 1 ? 's' : ''}`;
+    return String(value);
   }
   return String(value);
 }
