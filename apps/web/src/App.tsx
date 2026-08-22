@@ -9,6 +9,7 @@ import RunsList from './pages/RunsList';
 import AgentResults from './pages/AgentResults';
 import Settings from './pages/Settings';
 import { ToastProvider } from './ui/toast';
+import { ActivityProvider } from './lib/activity';
 
 const queryClient = new QueryClient();
 
@@ -16,6 +17,7 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
+      <ActivityProvider>
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Layout />}>
@@ -29,6 +31,7 @@ export default function App() {
           </Route>
         </Routes>
       </BrowserRouter>
+      </ActivityProvider>
       </ToastProvider>
     </QueryClientProvider>
   );

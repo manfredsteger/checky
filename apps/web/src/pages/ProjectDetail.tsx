@@ -6,7 +6,7 @@ import { useToast } from '../ui/toast';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { ProjectParamsEditor } from '../ui/ProjectParamsEditor';
 import { AgentParamsEditor } from '../ui/AgentParamsEditor';
-import { Settings2, LineChart } from 'lucide-react';
+import { Settings2, LineChart, Loader2 } from 'lucide-react';
 import { ProjectOverview } from '../ui/ProjectOverview';
 import { CronExpressionParser } from 'cron-parser';
 import { format } from 'date-fns';
@@ -15,6 +15,8 @@ import type { Agent } from '@checky/shared';
 import { resolveDisplay, type Resolved } from '../lib/resultDisplay';
 import { ResultView } from '../ui/ResultView';
 import { CATEGORIES, categoryOf } from '../lib/categories';
+import { useAgentActivity, useAgentOutcome, useProjectActivity, useActivity, formatElapsed } from '../lib/activity';
+import { RunProgressBar, RunStatusChip, RunOutcomeChip } from '../ui/RunActivity';
 
 const PRIO: Record<number, { label: string; cls: string }> = {
   1: { label: 'P1', cls: 'bg-red-500/15 text-red-300' },
@@ -35,6 +37,8 @@ function AgentCard({ agent, projectId, resolved, onToggle, onTrigger, onEdit, tr
   onToggle: (a: Agent) => void; onTrigger: (id: string) => void; onEdit: (a: Agent) => void; triggering: boolean;
 }) {
   const prio = PRIO[(agent.params as any)?._priority] ?? PRIO[3];
+  const activity = useAgentActivity(agent.id);
+  const outcome = useAgentOutcome(agent.id);
   const { data: results } = useQuery({
     queryKey: ['agent-last', agent.id],
     queryFn: () => api.getAgentResults(agent.id),
@@ -48,13 +52,23 @@ function AgentCard({ agent, projectId, resolved, onToggle, onTrigger, onEdit, tr
   const notLearned = agent.has_recipe === false && !agent.provider;
 
   return (
-    <div className={`bg-[#111827] border p-5 rounded-xl flex flex-col gap-3 ${notLearned ? 'border-amber-500/40' : 'border-[#1f2937]'} ${!agent.enabled ? 'opacity-70' : ''}`}>
+    <div className={`relative bg-[#111827] border p-5 rounded-xl flex flex-col gap-3 overflow-hidden transition-colors
+      ${activity ? (activity.stalled ? 'border-amber-500/60 shadow-[0_0_0_1px_rgba(245,158,11,0.25)]' : 'border-emerald-500/60 shadow-[0_0_0_1px_rgba(16,185,129,0.25)]')
+        : outcome ? (outcome.status === 'failed' ? 'border-red-500/50' : 'border-emerald-500/40')
+        : notLearned ? 'border-amber-500/40' : 'border-[#1f2937]'}
+      ${!agent.enabled && !activity ? 'opacity-70' : ''}`}>
+      {activity && <RunProgressBar activity={activity} className="absolute inset-x-0 top-0 rounded-none" />}
+
       <div className="flex justify-between items-start gap-2">
         <div className="flex items-center gap-2">
           <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${prio.cls}`}>{prio.label}</span>
-          {agent.enabled
-            ? <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 text-[10px] font-bold rounded uppercase tracking-wider">Aktiv</span>
-            : <span className="px-2 py-0.5 bg-[#374151] text-[#9ca3af] text-[10px] font-bold rounded uppercase tracking-wider">Inaktiv</span>}
+          {activity
+            ? <RunStatusChip activity={activity} />
+            : outcome
+            ? <RunOutcomeChip outcome={outcome} />
+            : agent.enabled
+              ? <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 text-[10px] font-bold rounded uppercase tracking-wider">Aktiv</span>
+              : <span className="px-2 py-0.5 bg-[#374151] text-[#9ca3af] text-[10px] font-bold rounded uppercase tracking-wider">Inaktiv</span>}
           {notLearned && <span className="px-2 py-0.5 bg-amber-500/15 text-amber-300 text-[10px] font-bold rounded uppercase tracking-wider">Nicht angelernt</span>}
           {agent.provider && <span className="px-2 py-0.5 bg-sky-500/15 text-sky-300 text-[10px] font-bold rounded uppercase tracking-wider">API · {agent.provider}</span>}
           {categoryOf((agent.params as any)?._category) && (
@@ -99,9 +113,24 @@ function AgentCard({ agent, projectId, resolved, onToggle, onTrigger, onEdit, tr
       </div>
 
       <div className="flex items-center justify-between mt-auto pt-3 border-t border-[#1f2937]">
-        <div className="flex flex-col">
-          <span className="text-[10px] text-[#6b7280] uppercase tracking-wider">Nächster Lauf</span>
-          <span className="text-xs font-mono text-white">{nextRunLabel(agent.schedule_cron, agent.enabled)}</span>
+        <div className="flex flex-col min-w-0">
+          {activity ? (
+            <>
+              <span className={`text-[10px] uppercase tracking-wider ${activity.stalled ? 'text-amber-400/80' : 'text-emerald-400/80'}`}>
+                {activity.status === 'queued' ? 'Wartet auf Worker' : 'Läuft gerade'}
+              </span>
+              <span className="text-xs font-mono text-white flex items-center gap-1.5">
+                <Loader2 className={`w-3 h-3 animate-spin ${activity.stalled ? 'text-amber-400' : 'text-emerald-400'}`} />
+                {formatElapsed(activity.elapsed)}
+                {activity.remaining != null && <span className="text-[#6b7280]">/ ~{formatElapsed(activity.elapsed + activity.remaining)}</span>}
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="text-[10px] text-[#6b7280] uppercase tracking-wider">Nächster Lauf</span>
+              <span className="text-xs font-mono text-white">{nextRunLabel(agent.schedule_cron, agent.enabled)}</span>
+            </>
+          )}
         </div>
         <div className="flex items-center gap-1.5">
           <Link to={`/agents/${agent.id}/results`} className="bg-[#1f2937] hover:bg-[#374151] text-white border border-[#374151] text-[10px] font-bold py-1.5 px-2.5 rounded">Ergebnisse</Link>
@@ -113,8 +142,12 @@ function AgentCard({ agent, projectId, resolved, onToggle, onTrigger, onEdit, tr
               Anlernen
             </Link>
           )}
-          <button disabled={triggering} onClick={() => onTrigger(agent.id)}
-            className="bg-[#1f2937] hover:bg-emerald-600/20 text-white hover:text-emerald-400 border border-[#374151] hover:border-emerald-500/50 text-[10px] font-bold py-1.5 px-2.5 rounded">Ausführen</button>
+          <button disabled={triggering || !!activity} onClick={() => onTrigger(agent.id)}
+            title={activity ? 'Ein Lauf ist bereits unterwegs' : 'Jetzt einen Lauf einreihen'}
+            className="bg-[#1f2937] hover:bg-emerald-600/20 text-white hover:text-emerald-400 border border-[#374151] hover:border-emerald-500/50 text-[10px] font-bold py-1.5 px-2.5 rounded disabled:opacity-50 disabled:hover:bg-[#1f2937] disabled:hover:text-white inline-flex items-center gap-1.5">
+            {activity && <Loader2 className="w-3 h-3 animate-spin" />}
+            {activity ? 'Läuft…' : 'Ausführen'}
+          </button>
         </div>
       </div>
     </div>
@@ -131,6 +164,8 @@ export default function ProjectDetail() {
   const [catFilter, setCatFilter] = useState<string | null>(null);
   const [editAgent, setEditAgent] = useState<Agent | null>(null);
 
+  const projectActivity = useProjectActivity(projectId!);
+
   const { data: project, error: projectError } = useQuery({ queryKey: ['projects', projectId], queryFn: () => api.getProject(projectId!), retry: false });
   const { data: agents, isLoading, error: agentsError } = useQuery({ queryKey: ['agents', projectId], queryFn: () => api.getProjectAgents(projectId!), retry: false });
   const { data: manifest } = useQuery({ queryKey: ['manifest', project?.manifest_id], queryFn: () => api.getManifest(project!.manifest_id!), enabled: !!project?.manifest_id });
@@ -139,9 +174,12 @@ export default function ProjectDetail() {
     mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) => api.updateAgent(id, { enabled }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['agents', projectId] }),
   });
+  const { markPending } = useActivity();
+
   const triggerMutation = useMutation({
-    mutationFn: (id: string) => api.triggerAgentRun(id),
-    onSuccess: () => toast('success', 'Lauf eingereiht.'),
+    mutationFn: (id: string) => { markPending(id); return api.triggerAgentRun(id); },
+    // Aktivität sofort nachladen, damit Spinner/Balken nicht erst beim nächsten Poll erscheinen.
+    onSuccess: () => { toast('success', 'Lauf eingereiht.'); queryClient.invalidateQueries({ queryKey: ['activity'] }); },
     onError: (e) => toast('error', (e as Error).message),
   });
 
@@ -155,10 +193,11 @@ export default function ProjectDetail() {
   const runAll = useMutation({
     mutationFn: async () => {
       const enabled = (agents ?? []).filter(a => a.enabled);
+      enabled.forEach(a => markPending(a.id));
       const res = await Promise.allSettled(enabled.map(a => api.triggerAgentRun(a.id)));
       return { ok: res.filter(r => r.status === 'fulfilled').length, total: enabled.length };
     },
-    onSuccess: (r) => toast('success', `${r.ok}/${r.total} Läufe eingereiht.`),
+    onSuccess: (r) => { toast('success', `${r.ok}/${r.total} Läufe eingereiht.`); queryClient.invalidateQueries({ queryKey: ['activity'] }); },
     onError: (e) => toast('error', (e as Error).message),
   });
 
@@ -186,12 +225,26 @@ export default function ProjectDetail() {
 
   return (
     <div className="flex-1 flex flex-col min-w-0">
-      <header className="h-16 border-b border-[#1f2937] flex items-center justify-between px-8 bg-[#0a0a0b] shrink-0">
+      <header className="relative h-16 border-b border-[#1f2937] flex items-center justify-between px-8 bg-[#0a0a0b] shrink-0">
+        {/* Laufender Balken über die ganze Breite: „im Projekt passiert gerade etwas". */}
+        {projectActivity.active && (
+          <div className="absolute inset-x-0 bottom-0 h-0.5 overflow-hidden bg-emerald-500/15">
+            <div className="h-full w-1/4 bg-emerald-400 checky-indeterminate" />
+          </div>
+        )}
         <div className="flex items-center gap-2 text-sm">
           <span className="text-[#6b7280]">Projekte</span>
           <span className="text-[#4b5563]">/</span>
           <span className="text-white font-medium">{project.name}</span>
           {agents && <span className="text-[#6b7280] text-xs">· {agents.length} Agenten</span>}
+          {projectActivity.active && (
+            <span className="ml-2 inline-flex items-center gap-1.5 rounded bg-emerald-500/15 text-emerald-300 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">
+              <Loader2 className="w-3 h-3 animate-spin" aria-hidden />
+              {projectActivity.running > 0 && `${projectActivity.running} läuft`}
+              {projectActivity.running > 0 && projectActivity.queued > 0 && ' · '}
+              {projectActivity.queued > 0 && `${projectActivity.queued} wartet`}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => setOverviewOpen(o => !o)} title="Projekt-Übersicht (Charts & Statistik)"
@@ -211,7 +264,8 @@ export default function ProjectDetail() {
             Alle pausieren
           </button>
           <button onClick={() => setConfirmRunAll(true)} disabled={runAll.isPending}
-            className="bg-[#1f2937] hover:bg-[#374151] border border-[#374151] text-white text-xs font-bold py-2 px-3 rounded transition-colors disabled:opacity-50">
+            className="bg-[#1f2937] hover:bg-[#374151] border border-[#374151] text-white text-xs font-bold py-2 px-3 rounded transition-colors disabled:opacity-50 inline-flex items-center gap-1.5">
+            {runAll.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
             Alle ausführen
           </button>
           <Link to={`/projects/${projectId}/agents/new`} className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-2 px-4 rounded transition-colors">+ Neuer Agent</Link>

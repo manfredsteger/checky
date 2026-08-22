@@ -9,9 +9,37 @@ export const ProjectSchema = z.object({
   description: z.string().nullable().optional(),
   manifest_id: z.string().nullable().optional(),
   params: z.record(z.string(), z.any()).nullable().default({}),
+  agent_count: z.number().int().optional(),     // von der API mitgeliefert (nicht in DB)
+  enabled_count: z.number().int().optional(),   // dito
   created_at: z.coerce.date(),
 });
 export type Project = z.infer<typeof ProjectSchema>;
+
+// --- Live-Aktivität (laufende/wartende Läufe für Spinner & Fortschritt) ------
+export interface ActiveRun {
+  run_id: string;
+  agent_id: string;
+  agent_name: string;
+  project_id: string;
+  status: 'queued' | 'running';
+  created_at: string;
+  started_at: string | null;
+}
+/** Ein gerade beendeter Lauf — kurze Erfolgs-/Fehler-Quittung in der Oberfläche. */
+export interface RecentRun {
+  run_id: string;
+  agent_id: string;
+  project_id: string;
+  status: 'succeeded' | 'failed' | 'healed';
+  finished_at: string;
+  error: string | null;
+}
+export interface Activity {
+  runs: ActiveRun[];
+  recent: RecentRun[];
+  eta: Record<string, number>;   // agent_id -> erwartete Laufdauer in Sekunden
+  server_time: string;
+}
 
 // --- Manifeste (Tracking-Typ-Vorlagen) ---------------------------------------
 export const ManifestParamSchema = z.object({

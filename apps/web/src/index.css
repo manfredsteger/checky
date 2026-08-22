@@ -4,3 +4,15 @@
   from { opacity: 0; transform: translateY(4px) scale(0.98); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
+
+/* Wanderndes Band für Läufe ohne bekannte Erwartungsdauer (unbestimmter Fortschritt). */
+@keyframes checkyIndeterminate {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
+.checky-indeterminate {
+  animation: checkyIndeterminate 1.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .checky-indeterminate { animation-duration: 3s; }
+}

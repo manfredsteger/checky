@@ -2,6 +2,28 @@ import { Link, Outlet, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { Box, PlaySquare, Plus, Settings } from 'lucide-react';
+import { useProjectActivity } from '../lib/activity';
+import { RunDot } from '../ui/RunActivity';
+
+/** Sidebar-Eintrag eines Projekts — mit Puls-Punkt, wenn dort etwas läuft. */
+function ProjectNavItem({ id, name, active }: { id: string; name: string; active: boolean }) {
+  const act = useProjectActivity(id);
+  return (
+    <Link
+      to={`/projects/${id}`}
+      className={`px-6 py-3 flex items-center justify-between gap-2 cursor-pointer transition-colors ${active ? 'bg-[#1f2937] border-l-4 border-emerald-500' : 'hover:bg-[#111827] border-l-4 border-transparent'}`}
+    >
+      <span className={`text-sm font-medium truncate ${active ? 'text-white' : ''}`}>{name}</span>
+      {act.active && (
+        <span className="flex items-center gap-1.5 shrink-0">
+          <span className="text-[10px] font-bold text-emerald-400 tabular-nums">{act.total}</span>
+          <RunDot tone={act.running > 0 ? 'running' : 'queued'}
+            title={`${act.running} laufen, ${act.queued} in Warteschlange`} />
+        </span>
+      )}
+    </Link>
+  );
+}
 
 export default function Layout() {
   const { data: projects } = useQuery({ queryKey: ['projects'], queryFn: api.getProjects });
@@ -20,13 +42,7 @@ export default function Layout() {
           </div>
           <div className='space-y-1'>
             {projects?.map(p => (
-              <Link 
-                key={p.id} 
-                to={`/projects/${p.id}`}
-                className={`px-6 py-3 flex items-center justify-between cursor-pointer transition-colors ${projectId === p.id ? 'bg-[#1f2937] border-l-4 border-emerald-500' : 'hover:bg-[#111827] border-l-4 border-transparent'}`}
-              >
-                <span className={`text-sm font-medium ${projectId === p.id ? 'text-white' : ''}`}>{p.name}</span>
-              </Link>
+              <ProjectNavItem key={p.id} id={p.id} name={p.name} active={projectId === p.id} />
             ))}
             {projects?.length === 0 && (
               <div className="px-6 text-xs text-[#6b7280]">Keine Projekte</div>

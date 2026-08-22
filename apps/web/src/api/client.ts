@@ -1,4 +1,4 @@
-import { Project, Agent, Run, Result, CreateProject, UpdateProject, CreateAgent, UpdateAgent, RecorderSession, AppSettings, UpdateSettings, Manifest, Blueprint, CheckyBundle } from '@checky/shared';
+import { Project, Agent, Run, Result, CreateProject, UpdateProject, CreateAgent, UpdateAgent, RecorderSession, AppSettings, UpdateSettings, Manifest, Blueprint, CheckyBundle, Activity } from '@checky/shared';
 
 const baseUrl = '/api';
 
@@ -44,6 +44,9 @@ export const api = {
   getAgentResults: (id: string) => fetcher<Result[]>(`/agents/${id}/results`),
   triggerAgentRun: (id: string) => fetcher<Run>(`/agents/${id}/trigger`, { method: 'POST' }),
   
+  // Live-Aktivität: was läuft/wartet gerade (für Spinner & Fortschrittsbalken)?
+  getActivity: () => fetcher<Activity>('/activity'),
+
   getRuns: (params?: { project_id?: string; agent_id?: string; status?: string }) => {
     const query = new URLSearchParams(params as Record<string, string>);
     return fetcher<RunWithAgent[]>(`/runs?${query.toString()}`);

@@ -6,7 +6,12 @@ import { asyncHandler, IdParamSchema } from '../lib/http.js';
 export const projectsRouter = Router();
 
 projectsRouter.get('/api/projects', asyncHandler(async (_req, res) => {
-  const result = await query('SELECT * FROM projects ORDER BY created_at DESC');
+  // agent_count/enabled_count als Kennzahl für die Kacheln (z.B. „1 von 2 läuft").
+  const result = await query(`
+    SELECT p.*,
+           (SELECT COUNT(*)::int FROM agents a WHERE a.project_id = p.id) AS agent_count,
+           (SELECT COUNT(*)::int FROM agents a WHERE a.project_id = p.id AND a.enabled) AS enabled_count
+    FROM projects p ORDER BY p.created_at DESC`);
   res.json(result.rows);
 }));
 

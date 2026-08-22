@@ -245,6 +245,7 @@ Weitere, in `docker-compose.yml` gesetzte Variablen: `SCREENSHOT_DIR`, `HEADLESS
 - **Projekte** anlegen und einen **Tracking-Typ** (Manifest) wählen; Parameter (z.B. Route, Datum, Wunschpreis) einmal zentral setzen — über das **Zahnrad** oben rechts im Projekt.
 - **Agenten** je Quelle anlegen. Solange kein Recipe existiert, ist ein Agent klar als **„Nicht angelernt"** markiert (amber Badge + Hinweis) und der grüne **Anlernen**-Button springt ins Auge.
 - **Massenaktionen**: „Alle aktivieren / pausieren / ausführen" im Projekt-Kopf.
+- **Live-Anzeige**: Läuft gerade etwas, zeigen Agenten-Karte, Projekt-Kachel und Sidebar das sofort — Fortschrittsbalken (bestimmt, sobald aus früheren Läufen eine Erwartungsdauer bekannt ist), Laufzeit und Restschätzung. Sehr kurze Läufe (API-Quellen sind teils in Millisekunden fertig) quittieren stattdessen für ~12 s mit „Aktualisiert vor Xs". Hängt ein Lauf ungewöhnlich lange, wird er amber. Die Kacheln laden ihr Ergebnis danach von selbst nach — kein Neuladen nötig.
 - **Ergebnisse**: Kennzahl (Preis) groß und farbig — grün bei erreichtem **Wunschpreis**, rot über der **Schmerzgrenze** — plus Verlaufs-Chart mit Ziel-/Grenz-Linien und CSV-/JSON-Export.
 
 ## Einen Check anlernen (Recorder)
@@ -281,6 +282,7 @@ Basis: `http://localhost:8080`
 
 **Läufe**
 - `GET /api/runs?project_id=&agent_id=&status=&limit=`
+- `GET /api/activity` — Live-Zustand fürs Dashboard: `runs` (queued/running), `recent` (in den letzten 20 s beendet), `eta` (erwartete Laufdauer je Agent aus den letzten 5 erfolgreichen Läufen, in Sekunden) und `server_time` (für den Uhr-Abgleich im Browser)
 - `GET /api/screenshots/:file.png`
 
 **Bausteinbibliothek**
