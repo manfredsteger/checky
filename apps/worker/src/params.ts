@@ -34,6 +34,14 @@ export function deriveParams(params: Record<string, any>): Record<string, any> {
   p.origin_code = asCode(p.origin_code, p.origin);
   p.dest_code = asCode(p.dest_code, p.dest);
 
+  // Check24 hängt an den Code die Art des Ortes: -A = einzelner Flughafen,
+  // -C = Stadt (alle Flughäfen). Default passt zum Normalfall „von einem
+  // bestimmten Flughafen in eine Stadt"; per origin_kind/dest_kind änderbar.
+  const kind = (v: any, dflt: string) => (String(v ?? '').trim().toUpperCase() === 'C' ? 'C'
+    : String(v ?? '').trim().toUpperCase() === 'A' ? 'A' : dflt);
+  p.origin_c24 = `${p.origin_code}-${kind(p.origin_kind, 'A')}`;
+  p.dest_c24 = `${p.dest_code}-${kind(p.dest_kind, 'C')}`;
+
   // Pfadsegment der Kayak-Familie (kayak/swoodoo/momondo):
   // „2adults/2children" bzw. nur „2adults", wenn keine Kinder mitreisen.
   p.pax_path = [`${adults}adults`, children > 0 ? `${children}children` : '']

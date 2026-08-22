@@ -20,6 +20,8 @@ const CMP_SELECTORS = [
   '#CybotCookiebotDialog', '#CybotCookiebotDialogBodyUnderlay',
   '[id*="sp_message_container"]', '.qc-cmp2-container',
   '.cmpbox', '#cmpwrapper',
+  // Check24: eigener Layer, der sonst jeden Klick abfängt.
+  '.c24-cookie-consent-wrapper', '.c24-strict-blocking-layer',
 ];
 
 /**
@@ -39,6 +41,9 @@ export async function dismissConsent(page: Page): Promise<string> {
       try { if (w.Didomi?.setUserAgreeToAll) { w.Didomi.setUserAgreeToAll(); done.push('didomi'); } } catch { /* ignore */ }
       try { if (w.Cookiebot?.submitCustomConsent) { w.Cookiebot.submitCustomConsent(true, true, true); done.push('cookiebot'); } } catch { /* ignore */ }
       try { if (w.__tcfapi) { w.__tcfapi('displayConsentUi', 2, () => {}); } } catch { /* ignore */ }
+      // Check24 kocht sein eigenes Süppchen: „fam" = alle akzeptieren. Die
+      // Buttons sind <a onclick=…>, deshalb greift die Button-Suche unten nicht.
+      try { if (w.Check24?.cookieBanner?.c24consent?.giveConsent) { w.Check24.cookieBanner.c24consent.giveConsent('fam'); done.push('check24'); } } catch { /* ignore */ }
       // Stufe 2: Overlay-Reste entfernen, damit nichts mehr den Klick abfängt.
       for (const s of sels) {
         document.querySelectorAll(s).forEach(el => { try { el.remove(); done.push('removed:' + s); } catch { /* ignore */ } });
@@ -50,17 +55,21 @@ export async function dismissConsent(page: Page): Promise<string> {
     if (viaApi.length) notes.push(...viaApi.slice(0, 4));
   } catch { /* Seite evtl. mitten in Navigation */ }
 
-  // Stufe 3: sichtbaren Zustimmen-Button klicken (auch in iframes).
+  // Stufe 3: sichtbares Zustimmen-Element klicken. Auch Links, denn manche
+  // Banner (Check24) bauen ihre Schalter als <a onclick=…> statt <button>.
   if (!notes.length) {
+    outer:
     for (const name of ACCEPT_NAMES) {
-      try {
-        const btn = page.getByRole('button', { name }).first();
-        if (await btn.isVisible({ timeout: 400 })) {
-          await btn.click({ timeout: 2500 });
-          notes.push('klick:' + name.source);
-          break;
-        }
-      } catch { /* nächster Kandidat */ }
+      for (const role of ['button', 'link'] as const) {
+        try {
+          const el = page.getByRole(role, { name }).first();
+          if (await el.isVisible({ timeout: 300 })) {
+            await el.click({ timeout: 2500 });
+            notes.push(`klick:${role}:${name.source}`);
+            break outer;
+          }
+        } catch { /* nächster Kandidat */ }
+      }
     }
   }
   if (!notes.length) {

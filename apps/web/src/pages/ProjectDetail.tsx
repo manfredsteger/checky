@@ -6,7 +6,7 @@ import { useToast } from '../ui/toast';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { ProjectParamsEditor } from '../ui/ProjectParamsEditor';
 import { AgentParamsEditor } from '../ui/AgentParamsEditor';
-import { Settings2, LineChart, Loader2 } from 'lucide-react';
+import { Settings2, LineChart, Loader2, Trash2 } from 'lucide-react';
 import { ProjectOverview } from '../ui/ProjectOverview';
 import { CronExpressionParser } from 'cron-parser';
 import { format } from 'date-fns';
@@ -32,9 +32,10 @@ function nextRunLabel(cron: string, enabled: boolean): string {
   } catch { return 'Ungültiger Cron'; }
 }
 
-function AgentCard({ agent, projectId, resolved, onToggle, onTrigger, onEdit, triggering }: {
+function AgentCard({ agent, projectId, resolved, onToggle, onTrigger, onEdit, onDelete, triggering }: {
   agent: Agent; projectId: string; resolved: Resolved;
-  onToggle: (a: Agent) => void; onTrigger: (id: string) => void; onEdit: (a: Agent) => void; triggering: boolean;
+  onToggle: (a: Agent) => void; onTrigger: (id: string) => void; onEdit: (a: Agent) => void;
+  onDelete: (a: Agent) => void; triggering: boolean;
 }) {
   const prio = PRIO[(agent.params as any)?._priority] ?? PRIO[3];
   const activity = useAgentActivity(agent.id);
@@ -82,6 +83,10 @@ function AgentCard({ agent, projectId, resolved, onToggle, onTrigger, onEdit, tr
           </button>
           <button onClick={() => onToggle(agent)} className="text-[10px] bg-[#1f2937] hover:bg-[#374151] px-2 py-1 rounded text-white">
             {agent.enabled ? 'Pausieren' : 'Aktivieren'}
+          </button>
+          <button onClick={() => onDelete(agent)} title="Agent löschen"
+            className="text-[#6b7280] hover:text-red-400 bg-[#1f2937] hover:bg-red-500/15 p-1.5 rounded">
+            <Trash2 className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
@@ -163,6 +168,7 @@ export default function ProjectDetail() {
   const [overviewOpen, setOverviewOpen] = useState(false);
   const [catFilter, setCatFilter] = useState<string | null>(null);
   const [editAgent, setEditAgent] = useState<Agent | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Agent | null>(null);
 
   const projectActivity = useProjectActivity(projectId!);
 
@@ -180,6 +186,20 @@ export default function ProjectDetail() {
     mutationFn: (id: string) => { markPending(id); return api.triggerAgentRun(id); },
     // Aktivität sofort nachladen, damit Spinner/Balken nicht erst beim nächsten Poll erscheinen.
     onSuccess: () => { toast('success', 'Lauf eingereiht.'); queryClient.invalidateQueries({ queryKey: ['activity'] }); },
+    onError: (e) => toast('error', (e as Error).message),
+  });
+
+  // Agent endgültig entfernen. Läufe, Ergebnisse und Recipes hängen per
+  // ON DELETE CASCADE daran und verschwinden mit — deshalb Rückfrage.
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.deleteAgent(id),
+    onSuccess: (_d, id) => {
+      const name = (agents ?? []).find(a => a.id === id)?.name ?? 'Agent';
+      toast('success', `„${name}" gelöscht.`);
+      setDeleteTarget(null);
+      queryClient.invalidateQueries({ queryKey: ['agents', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+    },
     onError: (e) => toast('error', (e as Error).message),
   });
 
@@ -303,7 +323,7 @@ export default function ProjectDetail() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
             {visible?.map(agent => (
-              <AgentCard key={agent.id} agent={agent} projectId={projectId!}
+              <AgentCard key={agent.id} agent={agent} projectId={projectId!} onDelete={setDeleteTarget}
                 resolved={resolveDisplay(manifest, { ...(project.params || {}), ...(agent.params || {}) })}
                 onToggle={(a) => toggleMutation.mutate({ id: a.id, enabled: !a.enabled })}
                 onTrigger={(id) => triggerMutation.mutate(id)}
@@ -313,6 +333,17 @@ export default function ProjectDetail() {
           </div>
         )}
       </section>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title={`„${deleteTarget?.name ?? ''}" löschen?`}
+        message={'Der Agent wird mit allen Läufen, Ergebnissen und angelernten Recipes entfernt. Das lässt sich nicht rückgängig machen. Nur pausieren? Dann abbrechen und stattdessen den Pausieren-Knopf nutzen.'}
+        confirmLabel="Endgültig löschen"
+        danger
+        loading={deleteMutation.isPending}
+        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+        onCancel={() => setDeleteTarget(null)}
+      />
 
       <ConfirmDialog
         open={confirmRunAll}

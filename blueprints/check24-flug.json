@@ -2,10 +2,66 @@
   "id": "check24-flug",
   "name": "Check24 Flug",
   "manifest_id": "flight",
+  "kind": "browser",
   "icon": "plane",
-  "description": "Günstigster Flugpreis über Check24 Flug für eine Route.",
+  "description": "Günstigster Flugpreis pro Person über CHECK24, plus Gesamtpreis für alle Reisenden.",
+  "note": "Ortscodes tragen bei Check24 ein Kürzel: -A = einzelner Flughafen, -C = Stadt (alle Flughäfen). Voreinstellung: Abflug -A, Ziel -C; über die Parameter origin_kind/dest_kind umstellbar. Sortierung order=price ist Pflicht, sonst steht Beliebtheit oben.",
   "site": "https://flug.check24.de/",
-  "goal_template": "Auf Check24 Flug den günstigsten Gesamtpreis für {{origin}} → {{dest}} am {{outbound}}{% if inbound %} (Rückflug {{inbound}}){% endif %} für {{adults}} Erwachsene ({{cabin}}) auslesen. Preis, Airline und Anzahl Stopps zurückgeben.",
+  "goal_template": "Günstigsten Flugpreis für {{origin}} → {{dest}} ({{outbound}}{% if inbound %} / {{inbound}}{% endif %}) bei CHECK24 auslesen.",
   "default_schedule": "0 7 * * *",
-  "version": 1
+  "params": {
+    "_category": "price"
+  },
+  "result_schema": {
+    "type": "object",
+    "properties": {
+      "price": {
+        "type": "number"
+      },
+      "total": {
+        "type": "number"
+      }
+    },
+    "required": [
+      "price"
+    ]
+  },
+  "recipe": [
+    {
+      "action": "goto",
+      "url": "https://flug.check24.de/search?from_0={{origin_c24}}&to_0={{dest_c24}}&date_0={{outbound}}&from_1={{dest_c24}}&to_1={{origin_c24}}&date_1={{inbound}}&adt={{adults}}&chd={{children}}&class=EPBF&order=price"
+    },
+    {
+      "action": "consent",
+      "optional": true,
+      "note": "Check24 nutzt einen eigenen Consent-Layer, der sonst jeden Klick abfaengt"
+    },
+    {
+      "action": "waitFor",
+      "selector": "[data-testid=\"effective_price_per_person\"]",
+      "ms": 90000
+    },
+    {
+      "action": "wait",
+      "ms": 5000
+    },
+    {
+      "action": "extract",
+      "mode": "dom_map",
+      "fallback": "ai_json",
+      "map": {
+        "price": {
+          "selector": "[data-testid=\"effective_price_per_person\"]",
+          "reduce": "min_number",
+          "regex": "([\\d.]+,\\d{2})\\s*€"
+        },
+        "total": {
+          "selector": "[data-testid*=\"total\"]",
+          "reduce": "min_number",
+          "regex": "([\\d.]+,\\d{2})\\s*€"
+        }
+      }
+    }
+  ],
+  "version": 2
 }
