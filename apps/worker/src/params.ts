@@ -45,6 +45,31 @@ export function deriveParams(params: Record<string, any>): Record<string, any> {
   p.origin_c24 = `${p.origin_code}-${kind(p.origin_kind, 'A')}`;
   p.dest_c24 = `${p.dest_code}-${kind(p.dest_kind, 'C')}`;
 
+  // Unix-Zeitstempel (Mitternacht UTC) — billigfluege.de/fluege.de erwarten das
+  // Reisedatum so in der URL statt als ISO-Datum.
+  const epoch = (iso: any): string => {
+    const t = Date.parse(`${String(iso ?? '').trim()}T00:00:00Z`);
+    return Number.isFinite(t) ? String(Math.floor(t / 1000)) : '';
+  };
+  p.outbound_ts = epoch(p.outbound);
+  p.inbound_ts = epoch(p.inbound);
+
+  // Kompaktdatum YYYYMMDD — so erwartet es lastminute.de in der URL.
+  const compact = (iso: any): string => String(iso ?? '').replace(/-/g, '');
+  p.outbound_compact = compact(p.outbound);
+  p.inbound_compact = compact(p.inbound);
+
+  // Deutsches Langdatum „1. Januar 2027" — react-dates-Kalender (Lufthansa)
+  // beschriften ihre Tageszellen so im aria-label.
+  const MONTHS_DE = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+  const longDe = (iso: any): string => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso ?? '').trim());
+    if (!m) return '';
+    return `${Number(m[3])}. ${MONTHS_DE[Number(m[2]) - 1]} ${m[1]}`;
+  };
+  p.outbound_de = longDe(p.outbound);
+  p.inbound_de = longDe(p.inbound);
+
   // Pfadsegment der Kayak-Familie (kayak/swoodoo/momondo):
   // „2adults/2children" bzw. nur „2adults", wenn keine Kinder mitreisen.
   p.pax_path = [`${adults}adults`, children > 0 ? `${children}children` : '']

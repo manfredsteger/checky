@@ -1,0 +1,59 @@
+{
+  "id": "billigfluege-flug",
+  "name": "fluege.de / billigfluege.de",
+  "manifest_id": "flight",
+  "kind": "browser",
+  "icon": "plane",
+  "description": "Günstigster Flugpreis pro Person über billigfluege.de — die Suchmaschine hinter fluege.de.",
+  "note": "Reisedatum steht als Unix-Zeitstempel in der URL (outbound_ts/inbound_ts werden daraus berechnet). Gelesen wird der NORMALPREIS, nicht der günstigere PLUS-Mitgliedspreis — der wäre ohne Abo nicht buchbar. Die Ergebnisse liegen im Shadow-DOM: Playwright-Selektoren finden sie, der ai_json-Notnagel nicht.",
+  "site": "https://go.billigfluege.de/",
+  "goal_template": "Günstigsten Flugpreis für {{origin}} → {{dest}} ({{outbound}}{% if inbound %} / {{inbound}}{% endif %}) über billigfluege.de auslesen.",
+  "default_schedule": "0 7 * * *",
+  "params": {
+    "_category": "price"
+  },
+  "result_schema": {
+    "type": "object",
+    "properties": {
+      "price": {
+        "type": "number"
+      }
+    },
+    "required": [
+      "price"
+    ]
+  },
+  "recipe": [
+    {
+      "action": "goto",
+      "url": "https://go.billigfluege.de/compare?is-area-search[]=false&is-area-search[]=false&is-flexible-date[]=false&is-flexible-date[]=false&departure[]={{origin_code}}&departure[]={{dest_code}}&arrival[]={{dest_code}}&arrival[]={{origin_code}}&depart-at[]={{outbound_ts}}&depart-at[]={{inbound_ts}}&adults={{adults}}&children={{children}}&infants=0&itinerary-type=round-trip"
+    },
+    {
+      "action": "consent",
+      "optional": true
+    },
+    {
+      "action": "waitFor",
+      "selector": ".normal-price",
+      "ms": 120000,
+      "note": "Angebote laden schubweise nach"
+    },
+    {
+      "action": "wait",
+      "ms": 20000,
+      "note": "Angebote laden schubweise nach und werden dabei neu sortiert"
+    },
+    {
+      "action": "extract",
+      "mode": "dom_map",
+      "map": {
+        "price": {
+          "selector": ".normal-price",
+          "reduce": "min_number",
+          "regex": "([\\d.]+,\\d{2})\\s*€"
+        }
+      }
+    }
+  ],
+  "version": 2
+}

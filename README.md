@@ -293,6 +293,14 @@ das Recipe die Suchmaske. Zwei Bausteine machen das haltbar:
 | `click` mit `repeat` | Zähler-Widgets (Reisende +/−), die bei jedem Aufruf beim selben Startwert stehen — die Klickzahl ist damit deterministisch. `repeat: 0` klickt gar nicht. |
 | `divide_by` | Quellen, die nur den Gesamtpreis nennen, auf „pro Person" umrechnen (`"divide_by": "{{pax_total}}"`). |
 
+> **Falle bei Kalendern:** `react-dates` (Lufthansa) rendert Nachbarmonate **unsichtbar mit**. Ein
+> `click_until` auf blosse Existenz hört deshalb zu früh auf und der Klick läuft danach in einen
+> Timeout. Immer `:visible` anhängen: `td[aria-label*="{{outbound_de}}"]:visible`.
+
+Für Datumsformate gibt es fertige abgeleitete Parameter: `{{outbound}}` (ISO),
+`{{outbound_compact}}` (`20270510`), `{{outbound_ts}}` (Unix-Sekunden) und `{{outbound_de}}`
+(`1. Januar 2027`) — jeweils auch als `inbound_*`.
+
 ```jsonc
 { "action": "click_until", "selector": "[aria-label=\"vor\"]",
   "until": "[data-qa=\"day-button-{{outbound}}\"]", "max": 30 },
