@@ -85,3 +85,29 @@ export async function createContext(browser: Browser, opts: ContextOpts = {}): P
   if (STEALTH) await context.addInitScript(EVASIONS);
   return context;
 }
+
+// --- Domain-Guardrail --------------------------------------------------------
+// Erlaubt wird die registrierbare Domain (eTLD+1) der Agent-URL, nicht nur der
+// exakte Host: Consent- und Weiterleitungsflüsse laufen regelmäßig über eine
+// Geschwister-Subdomain (z.B. www.google.com -> consent.google.com), und die zu
+// blocken bricht die Seite. Ein Wechsel auf eine FREMDE Site bleibt gesperrt.
+const TWO_PART_TLDS = new Set([
+  'co.uk', 'org.uk', 'ac.uk', 'gov.uk', 'co.jp', 'ne.jp', 'or.jp',
+  'com.au', 'net.au', 'org.au', 'co.nz', 'com.br', 'com.mx',
+  'co.za', 'com.tr', 'co.in', 'com.cn', 'com.pl', 'com.es',
+]);
+
+export function registrableDomain(host: string): string {
+  const parts = host.split('.');
+  if (parts.length <= 2) return host;
+  const last2 = parts.slice(-2).join('.');
+  return TWO_PART_TLDS.has(last2) ? parts.slice(-3).join('.') : last2;
+}
+
+/** Gehört `url` zur selben registrierbaren Domain wie `allowedHost`? */
+export function isAllowedUrl(url: string, allowedHost: string): boolean {
+  let host: string;
+  try { host = new URL(url).hostname; } catch { return false; }
+  const base = registrableDomain(allowedHost);
+  return host === base || host.endsWith('.' + base);
+}

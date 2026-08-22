@@ -248,7 +248,42 @@ Weitere, in `docker-compose.yml` gesetzte Variablen: `SCREENSHOT_DIR`, `HEADLESS
 - **Live-Anzeige**: Läuft gerade etwas, zeigen Agenten-Karte, Projekt-Kachel und Sidebar das sofort — Fortschrittsbalken (bestimmt, sobald aus früheren Läufen eine Erwartungsdauer bekannt ist), Laufzeit und Restschätzung. Sehr kurze Läufe (API-Quellen sind teils in Millisekunden fertig) quittieren stattdessen für ~12 s mit „Aktualisiert vor Xs". Hängt ein Lauf ungewöhnlich lange, wird er amber. Die Kacheln laden ihr Ergebnis danach von selbst nach — kein Neuladen nötig.
 - **Ergebnisse**: Kennzahl (Preis) groß und farbig — grün bei erreichtem **Wunschpreis**, rot über der **Schmerzgrenze** — plus Verlaufs-Chart mit Ziel-/Grenz-Linien und CSV-/JSON-Export.
 
+## Der schnellste Weg: Deep-Link statt Anlernen
+
+Bei vielen Vergleichsportalen steht die **komplette Suche in der URL**. Dann braucht es gar kein
+Anlernen: der Blueprint bringt ein fertiges Recipe mit, und der Agent liefert ab dem ersten Klick
+echte Daten. Solche Vorlagen tragen im Blueprint-Picker das Abzeichen **„Sofort"**.
+
+```
+https://www.kayak.de/flights/BER-JFK/2027-01-01/2027-01-15/2adults?sort=price_a&fs=stops=~1;legdur=-1200
+              └── Route ──┘ └── Hinflug ─┘└── Rückflug ─┘└─ Reisende ─┘  └── max. 1 Stopp, ≤20 h ──┘
+```
+
+Das Recipe dazu ist immer dasselbe Muster — Seite öffnen, Consent wegräumen, auf die Ergebnisliste
+warten, günstigsten Preis aus **allen** Treffern ziehen:
+
+```jsonc
+{ "action": "goto",    "url": "https://…/{{origin_code}}-{{dest_code}}/{{outbound}}{{inbound_seg}}/{{pax_path}}?…" },
+{ "action": "consent", "optional": true },
+{ "action": "waitFor", "selector": "[class*=\"price-text\"]", "ms": 90000 },
+{ "action": "extract", "mode": "dom_map", "map": {
+    "price": { "selector": "[class*=\"price-text\"]", "reduce": "min_number" }   // Minimum über alle Preise
+}}
+```
+
+**Abgeleitete Parameter** (`apps/worker/src/params.ts`) halten die URLs lesbar: aus `adults`/`children`
+wird `pax_path`, aus `max_stops`/`max_duration_h` wird `flight_filter`, aus `inbound` wird
+`inbound_seg` (leer = Nur-Hinflug). `origin_code`/`dest_code` sind die IATA-Codes für URL-Quellen —
+API-Quellen wie Kiwi verstehen auch „Tokio", eine URL nicht.
+
+> **Warum die Dauergrenze wichtig ist:** ohne `max_duration_h` gewinnt bei fernen Reisedaten
+> regelmäßig ein 30-Stunden-Umsteigekonstrukt den Preisvergleich. Mit `max_stops=1` und
+> `max_duration_h=20` liefert Kayak für BER→JFK 620 € statt eines unbrauchbaren 480-€-Tarifs
+> mit 19 h Aufenthalt in Reykjavík.
+
 ## Einen Check anlernen (Recorder)
+
+Nur nötig, wenn die Quelle **keinen** Deep-Link kennt.
 
 Zwei Modi:
 
@@ -257,9 +292,24 @@ Zwei Modi:
 
 In beiden Fällen entsteht am Ende eine **Vorschau**; nach deiner Bestätigung wird sie als **Recipe-Version** gespeichert und der Agent läuft ab dann deterministisch.
 
+Der Anlern-Agent bekommt automatisch die zusammengeführten Projekt- und Agent-Parameter (mit
+aufgelösten `{{Platzhalter}}` im Ziel), räumt nach jeder Navigation Consent-Layer weg und kann
+`wait`, `press` und `dismiss_consent` nutzen. Findet er **kein** Ergebnisfeld, endet die Session als
+**`failed` mit Begründung** — nicht als leere Bestätigungs-Vorschau. Ein Recipe, das nichts ausliest,
+ist schlimmer als gar keins.
+
 ## Anti-Detection
 
 Damit Bot-Schutz (z.B. bei Flugportalen) nicht sofort blockt, läuft der Browser **headful unter Xvfb** (virtuelles Display) statt headless, mit realistischem Linux-Chrome-Fingerprint und gängigen Evasions (`navigator.webdriver`, Plugins, `window.chrome`, WebGL). Gesteuert über `HEADLESS=false` und `STEALTH=true` (im worker gesetzt).
+
+**Domain-Guardrail.** Ein Agent darf die Seite nicht verlassen — begrenzt wird aber auf die
+*registrierbare* Domain (eTLD+1) und nur für **Dokument-Navigationen**. Subressourcen (CDN, Fonts,
+XHR der Ergebnis-API) laufen durch: sie zu blocken lässt die Seite leer bleiben und ist selbst ein
+Bot-Merkmal. Geschwister-Subdomains sind erlaubt, weil Consent-Flüsse dorthin umleiten
+(`www.google.com` → `consent.google.com`); ein Wechsel auf eine fremde Site bleibt gesperrt.
+
+**Was nicht geht.** Skyscanner (PerimeterX) zeigt statt Ergebnissen ein Captcha; ohne Residential-Proxy
+ist das nicht lösbar. Solche Quellen gehören deaktiviert und markiert, nicht täglich rot laufen gelassen.
 
 ## API-Referenz
 

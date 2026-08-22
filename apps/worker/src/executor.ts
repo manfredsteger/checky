@@ -2,19 +2,33 @@ import { Browser, BrowserContext, Page, Locator } from 'playwright';
 import path from 'path';
 import fs from 'fs';
 import { jsonSchemaToZod, type AIProvider } from '@checky/shared';
-import { launchBrowser, createContext } from './browser.js';
+import { launchBrowser, createContext, isAllowedUrl } from './browser.js';
+import { dismissConsent } from './consent.js';
+
+// Ein Ergebnisfeld kann ein schlichter Selektor sein ODER eine Feldspezifikation.
+// Letztere ist der Schlüssel für Ergebnislisten (Flug-/Preisvergleiche): dort
+// stehen dutzende Preise auf der Seite und wir wollen gezielt den günstigsten.
+export interface FieldSpec {
+  selector: string;
+  attr?: string;                                    // statt Textinhalt ein Attribut lesen
+  regex?: string;                                   // erste Fundstelle (bzw. Gruppe 1) übernehmen
+  index?: number;                                   // n-tes Element (Default 0)
+  reduce?: 'first' | 'min_number' | 'max_number';   // über ALLE Treffer reduzieren
+  as?: 'text' | 'number';                           // 'number' -> deutsche Zahl parsen
+}
 
 export interface Step {
-  action: 'goto' | 'click' | 'fill' | 'select' | 'waitFor' | 'extract' | 'press';
+  action: 'goto' | 'click' | 'fill' | 'select' | 'waitFor' | 'extract' | 'press' | 'wait' | 'scroll' | 'consent';
   selector?: string;
   url?: string;
   value?: string;
   key?: string;
+  ms?: number;                 // wait / waitFor-Timeout
   optional?: boolean;
   note?: string;
   mode?: 'dom_map' | 'ai_json';
   fallback?: 'ai_json' | string;
-  map?: Record<string, string>;
+  map?: Record<string, string | FieldSpec>;
 }
 
 export interface Recipe {
@@ -39,6 +53,18 @@ function substitute(text: string, params: Record<string, any>): string {
   return text.replace(/\{\{(.*?)\}\}/g, (_, key) => {
     return params[key] !== undefined ? String(params[key]) : '';
   });
+}
+
+// „1.175 €", „889 € /Person", „1 175,50" -> 1175 / 889 / 1175.5
+export function parseGermanNumber(text: string): number | null {
+  if (!text) return null;
+  const m = text.replace(/\u00a0/g, ' ').match(/-?\d{1,3}(?:[.\s]\d{3})+(?:,\d+)?|-?\d+(?:,\d+)?|-?\d+(?:\.\d+)?/);
+  if (!m) return null;
+  let t = m[0].replace(/\s/g, '');
+  if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.');       // 1.175,50 -> 1175.50
+  else if (/\.\d{3}(?:\D|$)/.test(t) || /^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, ''); // 1.175 -> 1175
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
 }
 
 // Parse string selectors safely
@@ -136,16 +162,16 @@ export async function executeRecipe(
     
     page = await context.newPage();
 
-    // Guardrail: Route allowlist
+    // Guardrail: Domain-Allowlist NUR für Seitenwechsel (Dokument-Navigationen).
+    // Subressourcen (CDN-Skripte, Fonts, XHR zu API-Hosts) müssen durch — sonst
+    // bleibt die Seite kaputt bzw. lädt ihre Ergebnisse nie nach, und das
+    // Blockieren aller Drittanbieter ist selbst ein Bot-Erkennungsmerkmal.
     const urlObj = new URL(agent.site);
     const allowedDomain = urlObj.hostname;
     await page.route('**/*', route => {
-      const reqUrl = new URL(route.request().url());
-      if (reqUrl.hostname === allowedDomain || reqUrl.hostname.endsWith('.' + allowedDomain)) {
-        route.continue();
-      } else {
-        route.abort();
-      }
+      const req = route.request();
+      if (req.resourceType() !== 'document' || !req.isNavigationRequest()) return route.continue();
+      isAllowedUrl(req.url(), allowedDomain) ? route.continue() : route.abort();
     });
 
     // KI-Fallback: Haupttext der Seite (max 15k Zeichen) -> extractJson gegen result_schema.
@@ -161,13 +187,55 @@ export async function executeRecipe(
       Object.assign(resultData, parsed.data as Record<string, any>);
     };
 
+    // Liest ein Feld gemäß Spezifikation aus der Seite.
+    const readField = async (specIn: string | FieldSpec): Promise<any> => {
+      const spec: FieldSpec = typeof specIn === 'string' ? { selector: specIn } : specIn;
+      const loc = getLocator(page!, substitute(spec.selector, agent.params));
+
+      // Rohwerte einsammeln: bei reduce über ALLE Treffer, sonst nur einer.
+      let raw: string[];
+      if (spec.reduce && spec.reduce !== 'first') {
+        const n = Math.min(await loc.count(), 400);   // Deckel gegen Monsterlisten
+        raw = [];
+        for (let i = 0; i < n; i++) {
+          const el = loc.nth(i);
+          const v = spec.attr ? await el.getAttribute(spec.attr) : await el.textContent();
+          if (v) raw.push(v);
+        }
+      } else {
+        const el = loc.nth(spec.index ?? 0);
+        const v = spec.attr ? await el.getAttribute(spec.attr) : await el.textContent();
+        raw = v ? [v] : [];
+      }
+      raw = raw.map(v => v.replace(/\s+/g, ' ').trim()).filter(Boolean);
+      if (!raw.length) return null;
+
+      if (spec.regex) {
+        const re = new RegExp(spec.regex);
+        raw = raw.map(v => { const m = v.match(re); return m ? (m[1] ?? m[0]) : ''; }).filter(Boolean);
+        if (!raw.length) return null;
+      }
+
+      const wantsNumber = spec.as === 'number' || spec.reduce === 'min_number' || spec.reduce === 'max_number';
+      if (!wantsNumber) return raw[0];
+
+      const nums = raw.map(parseGermanNumber).filter((n): n is number => n !== null);
+      if (!nums.length) return null;
+      if (spec.reduce === 'min_number') return Math.min(...nums);
+      if (spec.reduce === 'max_number') return Math.max(...nums);
+      return nums[0];
+    };
+
     // Extraktion: dom_map (mit optionalem ai_json-Fallback) oder direkt ai_json.
     const runExtract = async (step: Step) => {
       if (step.mode === 'dom_map' && step.map) {
         try {
           for (const [field, sel] of Object.entries(step.map)) {
-            const loc = getLocator(page!, substitute(sel as string, agent.params));
-            resultData[field] = (await loc.textContent())?.trim() || null;
+            resultData[field] = await readField(sel);
+          }
+          // Ein dom_map, das nur leere Felder liefert, ist ein stiller Fehlschlag.
+          if (Object.values(resultData).every(v => v === null || v === '')) {
+            throw new Error('dom_map lieferte keine Werte (alle Selektoren leer)');
           }
         } catch (e) {
           if (step.fallback === 'ai_json' && aiProvider) await runAiJson();
@@ -182,6 +250,15 @@ export async function executeRecipe(
     const runAction = async (step: Step) => {
       if (step.action === 'goto' && step.url) {
         await page!.goto(substitute(step.url, agent.params), { waitUntil: 'domcontentloaded' });
+        // Cookie-Layer sofort wegräumen: er verdeckt sonst jeden folgenden Klick.
+        await dismissConsent(page!);
+      } else if (step.action === 'consent') {
+        await dismissConsent(page!);
+      } else if (step.action === 'wait') {
+        await page!.waitForTimeout(Math.min(step.ms ?? 2000, 120000));
+      } else if (step.action === 'scroll') {
+        await page!.evaluate(() => window.scrollBy(0, window.innerHeight * 2));
+        await page!.waitForTimeout(500);
       } else if (step.action === 'click' && step.selector) {
         const loc = getLocator(page!, substitute(step.selector, agent.params));
         await checkGuardrails(loc, 'click');
@@ -202,7 +279,8 @@ export async function executeRecipe(
           await page!.keyboard.press(step.key);
         }
       } else if (step.action === 'waitFor' && step.selector) {
-        await getLocator(page!, substitute(step.selector, agent.params)).waitFor({ state: 'visible' });
+        await getLocator(page!, substitute(step.selector, agent.params))
+          .first().waitFor({ state: 'visible', timeout: step.ms ?? 60000 });
       } else if (step.action === 'extract') {
         await runExtract(step);
       }

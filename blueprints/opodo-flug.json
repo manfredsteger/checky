@@ -1,0 +1,66 @@
+{
+  "id": "opodo-flug",
+  "name": "Opodo Flug",
+  "manifest_id": "flight",
+  "kind": "browser",
+  "icon": "plane",
+  "description": "Günstigster Flugpreis pro Person über Opodo, inkl. Reisedauer der günstigsten Verbindung.",
+  "note": "Opodo kennt keinen Dauerfilter in der URL — die günstigste Verbindung ist oft ein langes Umsteigekonstrukt. Deshalb wird die Dauer mitgelesen.",
+  "site": "https://www.opodo.de/travel/",
+  "goal_template": "Günstigsten Flugpreis für {{origin}} → {{dest}} ({{outbound}}{% if inbound %} / {{inbound}}{% endif %}) bei Opodo auslesen.",
+  "default_schedule": "0 7 * * *",
+  "params": {
+    "_category": "price"
+  },
+  "result_schema": {
+    "type": "object",
+    "properties": {
+      "price": {
+        "type": "number"
+      },
+      "duration": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "price"
+    ]
+  },
+  "recipe": [
+    {
+      "action": "goto",
+      "url": "https://www.opodo.de/travel/#/results/type=R;from={{origin_code}};to={{dest_code}};dep={{outbound}};ret={{inbound}};adults={{adults}};children={{children}}"
+    },
+    {
+      "action": "consent",
+      "optional": true
+    },
+    {
+      "action": "waitFor",
+      "selector": "[data-testid*=\"cheapest\"]",
+      "ms": 90000,
+      "note": "Ergebnis-Kopfzeile mit dem guenstigsten Angebot"
+    },
+    {
+      "action": "wait",
+      "ms": 4000
+    },
+    {
+      "action": "extract",
+      "mode": "dom_map",
+      "fallback": "ai_json",
+      "map": {
+        "price": {
+          "selector": "[data-testid*=\"cheapest\"]",
+          "as": "number",
+          "regex": "(\\d{1,3}(?:\\.\\d{3})*)\\s*€"
+        },
+        "duration": {
+          "selector": "[data-testid*=\"cheapest\"]",
+          "regex": "(\\d+\\s?Std\\.\\s*\\d*'?)"
+        }
+      }
+    }
+  ],
+  "version": 1
+}

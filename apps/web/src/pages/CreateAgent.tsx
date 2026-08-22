@@ -20,6 +20,7 @@ export default function CreateAgent() {
   const [enabled, setEnabled] = useState(false);
   const [provider, setProvider] = useState<string | null>(null);
   const [blueprintId, setBlueprintId] = useState('');
+  const [recipe, setRecipe] = useState<any[] | undefined>(undefined);
   const [category, setCategory] = useState('price');
 
   // Blueprints (Quellen-Vorlagen) für den Tracking-Typ des Projekts.
@@ -28,14 +29,22 @@ export default function CreateAgent() {
 
   const applyBlueprint = (bp: Blueprint | undefined) => {
     setBlueprintId(bp?.id || '');
+    setRecipe(undefined);
     if (!bp) { setProvider(null); return; }
     setName(bp.name);
     setSite(bp.site);
     setGoal(bp.goal_template || '');
     setProvider(bp.kind === 'api' ? (bp.provider || null) : null);
     if (bp.default_schedule) { setScheduleMode('expert'); setExpertCron(bp.default_schedule); }
-    if (bp.kind === 'api') setEnabled(true); // API-Quellen brauchen kein Anlernen -> gleich aktiv
+    if (bp.result_schema) setResultSchema(JSON.stringify(bp.result_schema, null, 2));
+    if (bp.params?._category) setCategory(String(bp.params._category));
+    // Fertiges Recipe („Starthilfe"): der Agent ist ohne Anlernen lauffähig.
+    if (bp.recipe?.length) setRecipe(bp.recipe);
+    if (bp.kind === 'api' || bp.recipe?.length) setEnabled(true);
   };
+
+  // true, sobald die gewählte Vorlage sofort laufen kann (API oder fertiges Recipe).
+  const readyToRun = !!provider || !!recipe?.length;
 
   const SCHEMA_TEMPLATES: Record<string, string> = {
     'Frei': '{\n  "value": "string"\n}',
@@ -95,6 +104,7 @@ export default function CreateAgent() {
         jitter_min: 0,
         enabled,
         provider: provider ?? undefined,
+        recipe,
       });
     },
     onSuccess: () => {
@@ -129,20 +139,25 @@ export default function CreateAgent() {
               {blueprintsQ.data!.map(bp => {
                 const active = blueprintId === bp.id;
                 const isApi = bp.kind === 'api';
+                const ready = isApi || !!bp.recipe?.length;
                 return (
                   <button key={bp.id} onClick={() => applyBlueprint(bp)}
                     className={`text-left p-3 rounded-lg border transition-colors ${active ? 'bg-sky-500/10 border-sky-500/60' : 'bg-[#0f151f] border-[#1f2937] hover:border-[#374151]'}`}>
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-semibold text-white">{bp.name}</span>
-                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${isApi ? 'bg-sky-500/20 text-sky-300' : 'bg-[#374151] text-[#9ca3af]'}`}>{isApi ? 'API' : 'Browser'}</span>
+                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${isApi ? 'bg-sky-500/20 text-sky-300' : ready ? 'bg-emerald-500/20 text-emerald-300' : 'bg-[#374151] text-[#9ca3af]'}`}>{isApi ? 'API' : ready ? 'Sofort' : 'Anlernen'}</span>
                     </div>
                     {bp.description && <div className="text-xs text-[#9ca3af] mt-1 leading-snug">{bp.description}</div>}
+                    {bp.note && <div className="text-[11px] text-[#6b7280] mt-1 leading-snug">{bp.note}</div>}
                   </button>
                 );
               })}
             </div>
             {blueprintId && provider && (
               <p className="text-xs text-sky-300 mt-4">✓ API-Quelle „{provider}" gewählt — kein Anlernen nötig. Die konkreten Werte (z.&nbsp;B. PLZ, Menge, Route) kommen aus den Projekt-Einstellungen (Zahnrad).</p>
+            )}
+            {blueprintId && !provider && !!recipe?.length && (
+              <p className="text-xs text-emerald-300 mt-4">✓ Vorlage bringt einen fertigen Ablauf mit ({recipe.length} Schritte) — kein Anlernen nötig. Die Suche steht komplett in der URL; Route, Datum und Reisende kommen aus den Projekt-Einstellungen (Zahnrad).</p>
             )}
           </div>
         )}

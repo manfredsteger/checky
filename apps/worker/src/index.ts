@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import { executeRecipe } from './executor.js';
 import { ClaudeAgentProvider } from './aiProvider.js';
 import { runRecorderSession, runAssistedRecorderSession } from './recorder.js';
+import { deriveParams } from './params.js';
 import { enqueueNotification, processOutbox, runCleanup, checkRateLimit } from './notify.js';
 import { fetchProvider } from './providers/index.js';
 
@@ -161,6 +162,7 @@ async function handleJob(job: any) {
     const { rows: pr } = await pool!.query('SELECT params FROM projects WHERE id = $1', [agent.project_id]);
     agent.params = { ...(pr[0]?.params || {}), ...(agent.params || {}) };
   } catch { /* Fallback: nur Agent-Params */ }
+  agent.params = deriveParams(agent.params);
 
   // 3. Jitter for cron jobs
   if (source === 'cron' && agent.jitter_min > 0) {
@@ -300,12 +302,26 @@ async function handleRecorderJob(job: any) {
     return;
   }
 
+  // Projekt-Params + Agent-Params zusammenführen und {{Platzhalter}} im Ziel
+  // auflösen — sonst liest der Anlern-Agent wörtlich „Flug {{origin}}→{{dest}}"
+  // und weiß weder Route noch Datum. (Der Ausführungspfad tat das längst.)
+  const agent = agents[0];
+  try {
+    const { rows: pr } = await pool!.query('SELECT params FROM projects WHERE id = $1', [agent.project_id]);
+    agent.params = { ...(pr[0]?.params || {}), ...(agent.params || {}) };
+  } catch { /* Fallback: nur Agent-Params */ }
+  agent.params = deriveParams(agent.params);
+  agent.goal_text = String(agent.goal_text || '').replace(
+    /\{\{(.*?)\}\}/g,
+    (m: string, k: string) => (agent.params?.[k.trim()] !== undefined ? String(agent.params[k.trim()]) : m),
+  );
+
   const mode = session.mode === 'assisted' ? 'assisted' : 'auto';
-  console.log(`[Worker] Recorder-Session ${session_id} (${mode}) für Agent ${agents[0].name} gestartet`);
+  console.log(`[Worker] Recorder-Session ${session_id} (${mode}) für Agent ${agent.name} gestartet`);
   if (mode === 'assisted') {
-    await runAssistedRecorderSession(session_id, agents[0], pool!);
+    await runAssistedRecorderSession(session_id, agent, pool!);
   } else {
-    await runRecorderSession(session_id, agents[0], pool!);
+    await runRecorderSession(session_id, agent, pool!);
   }
   console.log(`[Worker] Recorder-Session ${session_id} beendet`);
 }

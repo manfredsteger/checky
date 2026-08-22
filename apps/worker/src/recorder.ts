@@ -6,16 +6,34 @@ import fs from 'fs';
 import type { Pool } from 'pg';
 import { getLocator } from './executor.js';
 import { launchBrowser, createContext } from './browser.js';
+import { dismissConsent } from './consent.js';
+import { isAllowedUrl } from './browser.js';
 
 // Buttons/Links, die der Anlern-Agent NIEMALS auslösen darf (SPEC §A.5).
 const DENY_ACTION = /(buchen|kaufen|bezahlen|anmelden|bestellen|einkauf|checkout|\bbuy\b|purchase|\bpay\b|log[- ]?in|sign[- ]?in|anmelden|registrieren|sign[- ]?up)/i;
 // Klicks, die als optionaler Consent-Schritt gelten.
 const CONSENT = /(akzeptier|ablehnen|accept|reject|consent|cookie|einverstanden|zustimmen|verstanden|ok)/i;
 
+// Freigegebene Werkzeuge. press/wait/dismiss_consent fehlten hier früher —
+// die Tools existierten, waren für das Modell aber unerreichbar.
+const RECORDER_TOOLS = [
+  'mcp__recorder__snapshot',
+  'mcp__recorder__navigate',
+  'mcp__recorder__click',
+  'mcp__recorder__type',
+  'mcp__recorder__press',
+  'mcp__recorder__read_text',
+  'mcp__recorder__extract_field',
+  'mcp__recorder__wait',
+  'mcp__recorder__dismiss_consent',
+];
+
 const SCREENSHOT_DIR = process.env.SCREENSHOT_DIR || path.join(process.cwd(), 'data', 'screenshots');
 
 interface RecorderCtx {
   events: Array<{ ts: number; tool: string; input?: any; result?: string; isSubmit?: boolean }>;
+  /** letzte Klartext-Antwort des Anlern-Agenten (Begründung bei Fehlschlag) */
+  lastText?: string;
   resultFields: Record<string, string>;   // Feldname -> Selektor (für dom_map)
   allowedHost: string;
   actionBudget: number;
@@ -23,11 +41,26 @@ interface RecorderCtx {
 }
 
 function hostAllowed(urlStr: string, allowedHost: string): boolean {
-  try {
-    const h = new URL(urlStr).hostname;
-    return h === allowedHost || h.endsWith('.' + allowedHost);
-  } catch {
-    return false;
+  return isAllowedUrl(urlStr, allowedHost);
+}
+
+// Wertet den Nachrichtenstrom des Agent-SDK aus: Klartext des Modells und das
+// Abschluss-Ergebnis landen im Mitschnitt. Ohne das endete ein Lauf, in dem das
+// Modell gar nichts tat (Auth-Fehler, Weigerung, Turn-Limit), stumm in einer
+// leeren „Bitte bestätigen"-Vorschau.
+function absorbMessage(msg: any, ctx: RecorderCtx): void {
+  if (msg?.type === 'assistant') {
+    const text = (msg.message?.content || [])
+      .filter((b: any) => b?.type === 'text').map((b: any) => b.text).join(' ').trim();
+    if (text) {
+      ctx.lastText = text;
+      ctx.events.push({ ts: Date.now(), tool: 'note', result: text.slice(0, 2000) });
+    }
+  } else if (msg?.type === 'result') {
+    const parts = [`subtype=${msg.subtype}`, `turns=${msg.num_turns ?? '?'}`];
+    if (msg.is_error) parts.push('FEHLER');
+    if (typeof msg.result === 'string' && msg.result.trim()) ctx.lastText = msg.result.trim();
+    ctx.events.push({ ts: Date.now(), tool: 'agent_result', result: parts.join(' ') + (msg.is_error ? ': ' + String(msg.result ?? '').slice(0, 500) : '') });
   }
 }
 
@@ -42,7 +75,7 @@ function err(text: string) {
 function buildRecorderServer(getPage: () => Page, ctx: RecorderCtx) {
   const budgetGuard = () => {
     if (ctx.aborted) return err('Session abgebrochen.');
-    if (ctx.events.filter(e => ['navigate', 'click', 'type', 'press', 'extract_field'].includes(e.tool)).length >= ctx.actionBudget) {
+    if (ctx.events.filter(e => ['navigate', 'click', 'type', 'press', 'extract_field', 'waitFor', 'wait'].includes(e.tool)).length >= ctx.actionBudget) {
       return err('Aktions-Budget erschöpft. Bitte jetzt mit report_result abschließen.');
     }
     return null;
@@ -69,8 +102,9 @@ function buildRecorderServer(getPage: () => Page, ctx: RecorderCtx) {
         return err(`Domain nicht erlaubt. Bleibe auf ${ctx.allowedHost}.`);
       }
       await getPage().goto(args.url, { waitUntil: 'domcontentloaded' });
+      const consent = await dismissConsent(getPage());
       ctx.events.push({ ts: Date.now(), tool: 'navigate', input: { url: args.url } });
-      return ok(`Navigiert zu ${args.url}`);
+      return ok(`Navigiert zu ${args.url} (Consent: ${consent}). Laden Ergebnisse nach? Dann 'wait' nutzen.`);
     }
   );
 
@@ -169,10 +203,44 @@ function buildRecorderServer(getPage: () => Page, ctx: RecorderCtx) {
     }
   );
 
+  const wait = tool(
+    'wait',
+    'Warte, bis ein Selektor sichtbar ist (bevorzugt) oder eine feste Zeit. Ergebnislisten von Vergleichsportalen laden asynchron nach — ohne Warten siehst du eine leere Seite.',
+    { selector: z.string().optional().describe('Selektor, auf den gewartet wird'), ms: z.number().optional().describe('Millisekunden (max 60000), wenn kein Selektor') },
+    async (args: any) => {
+      if (ctx.aborted) return err('Session abgebrochen.');
+      const ms = Math.min(args.ms ?? 5000, 60000);
+      if (args.selector) {
+        try {
+          await getLocator(getPage(), args.selector).first().waitFor({ state: 'visible', timeout: Math.max(ms, 30000) });
+        } catch {
+          return err(`Selektor „${args.selector}" wurde nicht sichtbar. Mit snapshot prüfen, was wirklich da ist.`);
+        }
+        ctx.events.push({ ts: Date.now(), tool: 'waitFor', input: { selector: args.selector, ms: Math.max(ms, 30000) } });
+        return ok(`Sichtbar: ${args.selector}`);
+      }
+      await getPage().waitForTimeout(ms);
+      ctx.events.push({ ts: Date.now(), tool: 'wait', input: { ms } });
+      return ok(`${ms} ms gewartet.`);
+    }
+  );
+
+  const consentTool = tool(
+    'dismiss_consent',
+    'Räumt ein Cookie-/Consent-Banner weg (auch in geschlossenem Shadow-DOM, wo Klicken nicht geht). Nach jeder navigate automatisch — nur nötig, wenn später noch ein Layer auftaucht.',
+    {},
+    async () => {
+      if (ctx.aborted) return err('Session abgebrochen.');
+      const note = await dismissConsent(getPage());
+      ctx.events.push({ ts: Date.now(), tool: 'consent', input: {} });
+      return ok(`Consent: ${note}`);
+    }
+  );
+
   return createSdkMcpServer({
     name: 'recorder',
     version: '1.0.0',
-    tools: [snapshot, navigate, click, type, press, readText, extractField],
+    tools: [snapshot, navigate, click, type, press, readText, extractField, wait, consentTool],
   });
 }
 
@@ -205,6 +273,12 @@ export function distillRecipe(
       steps.push({ action: 'fill', selector: e.input.selector, value: paramize(e.input.text, params) });
     } else if (e.tool === 'press') {
       steps.push({ action: 'press', key: e.input.key, ...(e.input.selector ? { selector: e.input.selector } : {}) });
+    } else if (e.tool === 'waitFor') {
+      steps.push({ action: 'waitFor', selector: e.input.selector, ms: e.input.ms, optional: true });
+    } else if (e.tool === 'wait') {
+      steps.push({ action: 'wait', ms: e.input.ms });
+    } else if (e.tool === 'consent') {
+      steps.push({ action: 'consent', optional: true });
     }
   }
   // Extraktion als dom_map (mit ai_json-Fallback, falls Selektoren brechen).
@@ -217,20 +291,36 @@ export function distillRecipe(
 }
 
 function buildSystemPrompt(agent: any): string {
+  const params = agent.params && Object.keys(agent.params).length ? agent.params : null;
   return [
-    'Du bist ein Anlern-Agent für ein Website-Monitoring-Tool. Führe die folgende Recherche EINMAL vollständig aus,',
-    'ausschließlich mit den bereitgestellten Browser-Werkzeugen. Danach ist Schluss.',
+    'Du bist ein Anlern-Agent für ein Website-Monitoring-Tool. Du führst die Recherche EINMAL vollständig aus.',
+    'Dein Ergebnis ist kein Text, sondern ein WIEDERHOLBARER WEG: die Schritte, die du gehst, werden',
+    'mitgeschnitten und später täglich ohne KI abgespielt. Bevorzuge deshalb den kürzesten stabilen Weg.',
     '',
     `ZIEL: ${agent.goal_text}`,
-    agent.params && Object.keys(agent.params).length ? `PARAMETER: ${JSON.stringify(agent.params)}` : '',
+    params ? `PARAMETER (verbindlich, genau diese Werte verwenden): ${JSON.stringify(params)}` : '',
     `START-SEITE: ${agent.site}`,
     '',
-    'VORGEHEN:',
-    '1. navigate zur Start-Seite, dann snapshot, um die Struktur zu sehen.',
-    '2. Klicke/tippe dich zum Ziel. Nach jeder Navigation erneut snapshot.',
-    '3. Nutze read_text, um Werte zu prüfen.',
-    '4. Rufe für JEDES Ergebnisfeld extract_field(name, selector) auf – der Selektor muss genau den Wert enthalten.',
-    '5. Beende dann mit einer kurzen Zusammenfassung, welche Felder das Ergebnis bilden.',
+    'STRATEGIE — in dieser Reihenfolge:',
+    '1. SUCH-URL STATT FORMULAR. Die meisten Vergleichsportale nehmen die komplette Suche in der URL entgegen',
+    '   (z.B. /flights/BER-JFK/2027-01-01/2027-01-15/2adults). Steht die Start-Seite schon auf so',
+    '   einer Ergebnis-URL, ist die Arbeit fast getan. Sonst: führe die Suche EINMAL von Hand aus und schau dir',
+    '   danach die URL an (read_text/snapshot zeigen die Seite; die URL steht im navigate-Ergebnis) — enthält sie',
+    '   die Suchparameter, navigiere direkt dorthin und verwirf den Formularweg. Formulare mit Autocomplete und',
+    '   Datumswählern sind beim Abspielen fragil; eine URL ist es nicht.',
+    '2. WARTEN. Ergebnislisten laden asynchron nach. Nach dem Laden IMMER wait(selector) auf das erste',
+    '   Ergebnis-Element — ohne das siehst (und speicherst) du eine leere Seite.',
+    '3. PRÜFEN. Mit snapshot/read_text sicherstellen, dass wirklich Ergebnisse zur gesuchten Route/zum gesuchten',
+    '   Datum dastehen — nicht nur Werbung, Startseite oder „keine Treffer".',
+    '4. EXTRAHIEREN. Für JEDES Ergebnisfeld extract_field(name, selector). Der Selektor muss genau den Wert',
+    '   enthalten und stabil sein: Klassen-Teiltreffer wie [class*="price-text"] sind besser als generierte',
+    '   Klassen wie .css-1x2y3z. Steht der gesuchte Wert mehrfach auf der Seite (Preisliste!), reicht der',
+    '   Selektor auf ALLE Treffer — die Auswertung nimmt später den günstigsten.',
+    '5. Zum Schluss kurz zusammenfassen, welche Felder das Ergebnis bilden und welcher Wert herauskam.',
+    '',
+    'WENN ES NICHT GEHT: Erkläre am Ende klar, WORAN es lag (Captcha, Bot-Sperre, keine Treffer, Feld nicht',
+    'bedienbar). Erfinde nichts und rufe extract_field NICHT auf einem Platzhalter/Werbepreis auf — ein falsch',
+    'angelerntes Recipe liefert täglich falsche Zahlen und ist schlimmer als gar keins.',
     '',
     'HARTE REGELN (GUARDRAILS):',
     '- Bleibe ausschließlich auf der erlaubten Domain.',
@@ -238,6 +328,37 @@ function buildSystemPrompt(agent: any): string {
     '- Niemals Passwort- oder Zahlungsfelder ausfüllen. Keine Logins, keine Downloads, keine CAPTCHA-Umgehung.',
     '- Bevorzuge stabile Locators: getByRole(...) > getByLabel(...) > getByPlaceholder(...) > CSS. Kein XPath.',
   ].filter(Boolean).join('\n');
+}
+
+// Schließt eine Session ab — und meldet einen Fehlschlag als Fehlschlag.
+// Ein Mitschnitt ohne Ergebnisfelder ergibt ein Recipe, das nichts ausliest;
+// den Nutzer damit in einen „Bitte bestätigen"-Dialog zu schicken, war der
+// Hauptgrund für den Eindruck, das Anlernen „macht nur Mist".
+async function finishSession(
+  ctx: RecorderCtx,
+  agent: any,
+  persist: (extra?: Record<string, any>) => Promise<void>,
+): Promise<void> {
+  const actions = ctx.events.filter(e => ['navigate', 'click', 'type', 'press'].includes(e.tool)).length;
+  const fields = Object.keys(ctx.resultFields).length;
+
+  if (fields === 0) {
+    const why = ctx.lastText
+      ? `Der Anlern-Agent hat kein Ergebnisfeld festgelegt. Seine letzte Rückmeldung: „${ctx.lastText.slice(0, 600)}"`
+      : 'Der Anlern-Agent hat kein Ergebnisfeld festgelegt und keine Rückmeldung geliefert (Modell nicht erreichbar oder sofort abgebrochen?).';
+    const hint = actions === 0
+      ? ' Es wurde keine einzige Aktion ausgeführt — bitte prüfen, ob CLAUDE_CODE_OAUTH_TOKEN gültig ist und die Seite erreichbar war.'
+      : ` Ausgeführte Aktionen: ${actions}. Tipp: Seite mit Suchparametern direkt als URL öffnen (Deep-Link) statt das Formular zu bedienen, oder den assistierten Modus nutzen.`;
+    await persist({ status: 'failed', error: why + hint });
+    return;
+  }
+
+  const recipe = distillRecipe(ctx.events, ctx.resultFields, agent.params || {});
+  await persist({
+    status: 'awaiting_confirm',
+    recipe_preview: JSON.stringify(recipe),
+    result_fields: JSON.stringify(Object.keys(ctx.resultFields)),
+  });
 }
 
 // Führt eine komplette Recorder-Session aus.
@@ -273,8 +394,13 @@ export async function runRecorderSession(sessionId: string, agent: any, pool: Po
     context.setDefaultTimeout(30000);
     page = await context.newPage();
     // Domain-Allowlist als zweite Verteidigungslinie.
+    // Allowlist NUR für Seitenwechsel. Subressourcen (CDN, Fonts, XHR der
+    // Ergebnis-API auf fremden Hosts) müssen durch, sonst bleibt die Seite leer
+    // bzw. kaputt — genau das ließ Anlern-Läufe bisher ins Leere laufen.
     await page.route('**/*', route => {
-      hostAllowed(route.request().url(), ctx.allowedHost) ? route.continue() : route.abort();
+      const req = route.request();
+      if (req.resourceType() !== 'document' || !req.isNavigationRequest()) return route.continue();
+      hostAllowed(req.url(), ctx.allowedHost) ? route.continue() : route.abort();
     });
     await page.goto(agent.site, { waitUntil: 'domcontentloaded' }).catch(() => {});
 
@@ -296,17 +422,24 @@ export async function runRecorderSession(sessionId: string, agent: any, pool: Po
     const timeout = new Promise<void>((resolve) => setTimeout(() => { ctx.aborted = true; resolve(); }, 5 * 60 * 1000));
 
     const agentRun = (async () => {
+      try {
       for await (const message of query({
         prompt: `Beginne jetzt mit der Recherche. Startseite ist bereits geladen: ${agent.site}`,
         options: {
           model: 'sonnet',
           systemPrompt: buildSystemPrompt(agent),
           mcpServers: { recorder: server },
-          allowedTools: ['mcp__recorder__snapshot', 'mcp__recorder__navigate', 'mcp__recorder__click', 'mcp__recorder__type', 'mcp__recorder__read_text', 'mcp__recorder__extract_field'],
+          allowedTools: RECORDER_TOOLS,
           maxTurns: 60,
         } as any,
       })) {
+        absorbMessage(message, ctx);
         if (ctx.aborted) break;
+      }
+      } catch (e: any) {
+        // Fehler des Agent-SDK (Auth, Netz, Turn-Limit) nicht verschlucken.
+        ctx.lastText = `Anlern-Agent abgebrochen: ${String(e?.message || e).slice(0, 400)}`;
+        ctx.events.push({ ts: Date.now(), tool: 'error', result: ctx.lastText });
       }
     })();
 
@@ -317,13 +450,7 @@ export async function runRecorderSession(sessionId: string, agent: any, pool: Po
       return;
     }
 
-    // Destillation -> Vorschau, auf Bestätigung warten.
-    const recipe = distillRecipe(ctx.events, ctx.resultFields, agent.params || {});
-    await persist({
-      status: 'awaiting_confirm',
-      recipe_preview: JSON.stringify(recipe),
-      result_fields: JSON.stringify(Object.keys(ctx.resultFields)),
-    });
+    await finishSession(ctx, agent, persist);
   } catch (e: any) {
     await persist({ status: 'failed', error: String(e?.message || e) }).catch(() => {});
   } finally {
@@ -381,15 +508,20 @@ export async function runAssistedRecorderSession(sessionId: string, agent: any, 
     context = await createContext(browser, { viewport: { width: 1440, height: 900 } });
     context.setDefaultTimeout(30000);
     page = await context.newPage();
+    // Allowlist NUR für Seitenwechsel. Subressourcen (CDN, Fonts, XHR der
+    // Ergebnis-API auf fremden Hosts) müssen durch, sonst bleibt die Seite leer
+    // bzw. kaputt — genau das ließ Anlern-Läufe bisher ins Leere laufen.
     await page.route('**/*', route => {
-      hostAllowed(route.request().url(), ctx.allowedHost) ? route.continue() : route.abort();
+      const req = route.request();
+      if (req.resourceType() !== 'document' || !req.isNavigationRequest()) return route.continue();
+      hostAllowed(req.url(), ctx.allowedHost) ? route.continue() : route.abort();
     });
     await page.goto(agent.site, { waitUntil: 'domcontentloaded' }).catch(() => {});
 
     const getPage = () => page!;
     const server = buildRecorderServer(getPage, ctx);
     const systemPrompt = buildAssistedSystemPrompt(agent);
-    const allowed = ['mcp__recorder__snapshot', 'mcp__recorder__navigate', 'mcp__recorder__click', 'mcp__recorder__type', 'mcp__recorder__read_text', 'mcp__recorder__extract_field'];
+    const allowed = RECORDER_TOOLS;
 
     ticker = setInterval(async () => {
       try { await page!.screenshot({ path: shotPath }).catch(() => {}); await persist({ screenshot_path: shotRel }); } catch { /* ignore */ }
@@ -410,8 +542,7 @@ export async function runAssistedRecorderSession(sessionId: string, agent: any, 
       await pool.query(`UPDATE recorder_sessions SET pending_instruction = NULL, status = 'running', updated_at = NOW() WHERE id = $1`, [sessionId]);
 
       if (instr === '__FINISH__') {
-        const recipe = distillRecipe(ctx.events, ctx.resultFields, agent.params || {});
-        await persist({ status: 'awaiting_confirm', recipe_preview: JSON.stringify(recipe), result_fields: JSON.stringify(Object.keys(ctx.resultFields)) });
+        await finishSession(ctx, agent, persist);
         return;
       }
 
@@ -421,6 +552,7 @@ export async function runAssistedRecorderSession(sessionId: string, agent: any, 
           prompt: instr,
           options: { model: 'sonnet', systemPrompt, mcpServers: { recorder: server }, allowedTools: allowed, maxTurns: 15 } as any,
         })) {
+          absorbMessage(message, ctx);
           if (ctx.aborted) break;
         }
       } catch (e: any) {
@@ -430,8 +562,7 @@ export async function runAssistedRecorderSession(sessionId: string, agent: any, 
     }
 
     if (ctx.aborted) { await persist({ status: 'aborted' }); return; }
-    const recipe = distillRecipe(ctx.events, ctx.resultFields, agent.params || {});
-    await persist({ status: 'awaiting_confirm', recipe_preview: JSON.stringify(recipe), result_fields: JSON.stringify(Object.keys(ctx.resultFields)) });
+    await finishSession(ctx, agent, persist);
   } catch (e: any) {
     await persist({ status: 'failed', error: String(e?.message || e) }).catch(() => {});
   } finally {

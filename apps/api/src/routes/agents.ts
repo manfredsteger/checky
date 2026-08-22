@@ -30,7 +30,15 @@ agentsRouter.post('/api/projects/:id/agents', asyncHandler(async (req, res) => {
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
     [id, data.name, data.site, data.goal_text, data.params, data.schedule_cron, data.jitter_min, data.enabled, data.notify, data.result_schema, data.provider ?? null]
   );
-  res.status(201).json(result.rows[0]);
+  const agent = result.rows[0];
+
+  // Starthilfe: bringt der Blueprint ein fertiges Recipe mit, wird es sofort als
+  // v1 hinterlegt — der Agent ist damit ohne Anlern-Lauf lauffähig.
+  if (data.recipe?.length) {
+    await query('INSERT INTO recipes (agent_id, version, steps) VALUES ($1, 1, $2)', [agent.id, JSON.stringify(data.recipe)]);
+    agent.has_recipe = true;
+  }
+  res.status(201).json(agent);
 }));
 
 agentsRouter.get('/api/agents/:id', asyncHandler(async (req, res) => {

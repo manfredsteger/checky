@@ -85,6 +85,16 @@ export const BlueprintSchema = z.object({
   site: z.string(),
   goal_template: z.string().optional(),
   default_schedule: z.string().optional(),
+  // Fertiges Recipe („Starthilfe"): Quellen, deren Suche komplett in der URL
+  // steht, brauchen kein Anlernen — der Agent läuft ab dem ersten Klick.
+  // {{param}} wird beim Ausführen aus Projekt+Agent-Params ersetzt.
+  recipe: z.array(z.any()).optional(),
+  // Vorbelegte Agent-Parameter (z.B. Selektor-Varianten, _category).
+  params: z.record(z.string(), z.any()).optional(),
+  // Ergebnis-Schema der Quelle (Felder, die das Recipe liefert).
+  result_schema: z.record(z.string(), z.any()).optional(),
+  // Freitext-Hinweis, der im Blueprint-Picker unter der Beschreibung steht.
+  note: z.string().optional(),
   version: z.number().optional(),
 });
 export type Blueprint = z.infer<typeof BlueprintSchema>;
@@ -169,6 +179,9 @@ export const CreateAgentSchema = AgentSchema.omit({
   id: true,
   project_id: true,
   created_at: true,
+}).extend({
+  // Optional: fertiges Recipe aus einem Blueprint direkt als v1 anlegen.
+  recipe: z.array(z.any()).optional(),
 });
 export type CreateAgent = z.infer<typeof CreateAgentSchema>;
 

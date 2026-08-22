@@ -1,0 +1,79 @@
+{
+  "id": "swoodoo-flug",
+  "name": "SWOODOO Flug",
+  "manifest_id": "flight",
+  "kind": "browser",
+  "icon": "plane",
+  "description": "Günstigster Flugpreis pro Person über SWOODOO (gleiche Suchmaschine wie Kayak, teils andere Angebote).",
+  "note": "Technisch identisch zu Kayak; als zweite Meinung neben Kayak sinnvoll.",
+  "site": "https://www.swoodoo.com/",
+  "goal_template": "Günstigsten Flugpreis pro Person für {{origin}} → {{dest}} ({{outbound}}{% if inbound %} / {{inbound}}{% endif %}) auslesen.",
+  "default_schedule": "0 7 * * *",
+  "params": {
+    "_category": "price"
+  },
+  "result_schema": {
+    "type": "object",
+    "properties": {
+      "price": {
+        "type": "number"
+      },
+      "airline": {
+        "type": "string"
+      },
+      "stops": {
+        "type": "string"
+      },
+      "total": {
+        "type": "number"
+      }
+    },
+    "required": [
+      "price"
+    ]
+  },
+  "recipe": [
+    {
+      "action": "goto",
+      "url": "https://www.swoodoo.com/flights/{{origin_code}}-{{dest_code}}/{{outbound}}{{inbound_seg}}/{{pax_path}}?sort=price_a&fs={{flight_filter}}"
+    },
+    {
+      "action": "consent",
+      "optional": true,
+      "note": "Cookie-Layer wegräumen"
+    },
+    {
+      "action": "waitFor",
+      "selector": "[class*=\"price-text\"]",
+      "ms": 90000,
+      "note": "Ergebnisliste laedt asynchron nach"
+    },
+    {
+      "action": "wait",
+      "ms": 5000,
+      "note": "Nachladende Angebote abwarten"
+    },
+    {
+      "action": "extract",
+      "mode": "dom_map",
+      "fallback": "ai_json",
+      "map": {
+        "price": {
+          "selector": "[class*=\"price-text\"]",
+          "reduce": "min_number",
+          "regex": "(\\d[\\d.\\s]*)\\s*€"
+        },
+        "airline": {
+          "selector": "[class*=\"J0g6\"]",
+          "index": 0
+        },
+        "stops": {
+          "selector": "[class*=\"JWEO\"]",
+          "index": 0,
+          "regex": "(Direkt|\\d+\\s*Stopp\\w*)"
+        }
+      }
+    }
+  ],
+  "version": 1
+}
