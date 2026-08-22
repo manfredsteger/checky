@@ -26,9 +26,25 @@ const CMP_SELECTORS = [
 
 /**
  * Räumt Consent-/Cookie-Layer weg. Best effort — wirft nie.
+ *
+ * Wichtig: viele Banner werden ERST NACH dem Laden nachgeschoben. Ein einziger
+ * Versuch direkt nach der Navigation greift dann ins Leere, und der Layer legt
+ * sich danach über die Seite und verschluckt jeden folgenden Klick. Deshalb
+ * wird bei Fehlanzeige einmal nachgefasst.
+ *
  * @returns kurzer Hinweis, was passiert ist (für den Mitschnitt).
  */
-export async function dismissConsent(page: Page): Promise<string> {
+export async function dismissConsent(page: Page, retries = 1): Promise<string> {
+  for (let attempt = 0; ; attempt++) {
+    const note = await dismissConsentOnce(page);
+    if (note !== NOTHING || attempt >= retries) return note;
+    await page.waitForTimeout(1800);
+  }
+}
+
+const NOTHING = 'kein Consent-Layer gefunden';
+
+async function dismissConsentOnce(page: Page): Promise<string> {
   const notes: string[] = [];
 
   // Stufe 1: offizielle CMP-APIs (erreichen auch geschlossenes Shadow-DOM).
@@ -83,5 +99,5 @@ export async function dismissConsent(page: Page): Promise<string> {
   }
 
   if (notes.length) await page.waitForTimeout(800);
-  return notes.length ? notes.join(', ') : 'kein Consent-Layer gefunden';
+  return notes.length ? notes.join(', ') : NOTHING;
 }

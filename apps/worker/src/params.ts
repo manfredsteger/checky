@@ -20,6 +20,9 @@ export function deriveParams(params: Record<string, any>): Record<string, any> {
   const maxDurH = num(p.max_duration_h);
 
   p.pax_total = adults + children + infants;
+  // Zaehler-Widgets starten bei 1 Erwachsenem / 0 Kindern: so oft auf „+" klicken.
+  p.adults_clicks = Math.max(adults - 1, 0);
+  p.children_clicks = Math.max(children, 0);
 
   // URL-basierte Quellen (Kayak & Co.) brauchen einen Flughafen-/Stadtcode im
   // Pfad, während API-Quellen (Kiwi) auch mit „Tokio" umgehen. Deshalb eigene

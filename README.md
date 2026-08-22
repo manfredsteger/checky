@@ -281,9 +281,31 @@ API-Quellen wie Kiwi verstehen auch „Tokio", eine URL nicht.
 > `max_duration_h=20` liefert Kayak für BER→JFK 620 € statt eines unbrauchbaren 480-€-Tarifs
 > mit 19 h Aufenthalt in Reykjavík.
 
+### Wenn die Suche nicht in der URL steht
+
+Manche Quellen halten ihre Ergebnisse hinter einem **Sitzungs-Token** (idealo:
+`/ergebnis/znLi1`) — ein Deep-Link ist dort grundsätzlich unmöglich. Dann bedient
+das Recipe die Suchmaske. Zwei Bausteine machen das haltbar:
+
+| Aktion | Wozu |
+|---|---|
+| `click_until` | Klickt (z.B. „nächster Monat"), **bis** ein Zielelement da ist. Eine feste Klickzahl wäre zeitabhängig: der Abstand von heute bis zum Reisedatum schrumpft täglich, und das Recipe würde still danebengreifen. |
+| `click` mit `repeat` | Zähler-Widgets (Reisende +/−), die bei jedem Aufruf beim selben Startwert stehen — die Klickzahl ist damit deterministisch. `repeat: 0` klickt gar nicht. |
+| `divide_by` | Quellen, die nur den Gesamtpreis nennen, auf „pro Person" umrechnen (`"divide_by": "{{pax_total}}"`). |
+
+```jsonc
+{ "action": "click_until", "selector": "[aria-label=\"vor\"]",
+  "until": "[data-qa=\"day-button-{{outbound}}\"]", "max": 30 },
+{ "action": "click", "selector": "[data-qa=\"day-button-{{outbound}}\"]" }
+```
+
+> **Consent-Banner werden meist nachgeschoben.** Ein Versuch direkt nach dem Laden
+> greift ins Leere — und der Layer legt sich danach über die Seite und verschluckt
+> jeden Klick. `dismissConsent` fasst deshalb einmal nach.
+
 ## Einen Check anlernen (Recorder)
 
-Nur nötig, wenn die Quelle **keinen** Deep-Link kennt.
+Nur nötig, wenn die Quelle weder Deep-Link noch bedienbare Suchmaske hat.
 
 Zwei Modi:
 

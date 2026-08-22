@@ -15,15 +15,22 @@ export interface FieldSpec {
   index?: number;                                   // n-tes Element (Default 0)
   reduce?: 'first' | 'min_number' | 'max_number';   // über ALLE Treffer reduzieren
   as?: 'text' | 'number';                           // 'number' -> deutsche Zahl parsen
+  // Teiler, z.B. "{{pax_total}}": manche Quellen nennen nur den Gesamtpreis,
+  // vergleichbar ist aber der Preis pro Person.
+  divide_by?: string | number;
+  round?: number;                                   // Nachkommastellen (Default 2)
 }
 
 export interface Step {
-  action: 'goto' | 'click' | 'fill' | 'select' | 'waitFor' | 'extract' | 'press' | 'wait' | 'scroll' | 'consent';
+  action: 'goto' | 'click' | 'fill' | 'select' | 'waitFor' | 'extract' | 'press' | 'wait' | 'scroll' | 'consent' | 'click_until';
   selector?: string;
   url?: string;
   value?: string;
   key?: string;
-  ms?: number;                 // wait / waitFor-Timeout
+  ms?: number;                 // wait / waitFor-Timeout / Pause zwischen Wiederholungen
+  repeat?: number;             // click: n-mal klicken (Zaehler-Widgets)
+  until?: string;              // click_until: Zielselektor, bis zu dem geklickt wird
+  max?: number;                // click_until: Sicherheitsdeckel (Default 24)
   optional?: boolean;
   note?: string;
   mode?: 'dom_map' | 'ai_json';
@@ -108,7 +115,10 @@ export function getLocator(page: Page, selectorStr: string): Locator {
 
 // Check Guardrails: Prevent password / cc fills and denylisted buttons
 async function checkGuardrails(locator: Locator, action: string) {
-  const isSafe = await locator.evaluate((el: HTMLElement | HTMLInputElement, act) => {
+  // .first() + kurzer Timeout: der Guardrail soll pruefen, nicht minutenlang auf
+  // ein fehlendes Element warten. Ohne das kostete ein falscher Selektor 120 s,
+  // bevor ueberhaupt jemand den eigentlichen Fehler zu sehen bekam.
+  const isSafe = await locator.first().evaluate((el: HTMLElement | HTMLInputElement, act) => {
     if (el instanceof HTMLInputElement) {
       if (el.type === 'password') return false;
       if (el.autocomplete && el.autocomplete.startsWith('cc-')) return false;
@@ -120,7 +130,7 @@ async function checkGuardrails(locator: Locator, action: string) {
       }
     }
     return true;
-  }, action);
+  }, action, { timeout: 15000 });
 
   if (!isSafe) {
     throw new Error(`Guardrail blocked interaction with selector. Action: ${action} is denied for security reasons.`);
@@ -221,9 +231,19 @@ export async function executeRecipe(
 
       const nums = raw.map(parseGermanNumber).filter((n): n is number => n !== null);
       if (!nums.length) return null;
-      if (spec.reduce === 'min_number') return Math.min(...nums);
-      if (spec.reduce === 'max_number') return Math.max(...nums);
-      return nums[0];
+      let value = spec.reduce === 'min_number' ? Math.min(...nums)
+        : spec.reduce === 'max_number' ? Math.max(...nums)
+        : nums[0];
+
+      if (spec.divide_by !== undefined) {
+        const div = Number(substitute(String(spec.divide_by), agent.params));
+        if (!Number.isFinite(div) || div === 0) {
+          throw new Error(`divide_by „${spec.divide_by}" ergibt keinen brauchbaren Teiler`);
+        }
+        const f = Math.pow(10, spec.round ?? 2);
+        value = Math.round((value / div) * f) / f;
+      }
+      return value;
     };
 
     // Extraktion: dom_map (mit optionalem ai_json-Fallback) oder direkt ai_json.
@@ -250,7 +270,9 @@ export async function executeRecipe(
     const runAction = async (step: Step) => {
       if (step.action === 'goto' && step.url) {
         await page!.goto(substitute(step.url, agent.params), { waitUntil: 'domcontentloaded' });
-        // Cookie-Layer sofort wegräumen: er verdeckt sonst jeden folgenden Klick.
+        // Kurz atmen lassen: Consent-Banner werden meist erst nachgeschoben.
+        await page!.waitForTimeout(1200);
+        // Cookie-Layer wegräumen — er verdeckt sonst jeden folgenden Klick.
         await dismissConsent(page!);
       } else if (step.action === 'consent') {
         await dismissConsent(page!);
@@ -262,7 +284,16 @@ export async function executeRecipe(
       } else if (step.action === 'click' && step.selector) {
         const loc = getLocator(page!, substitute(step.selector, agent.params));
         await checkGuardrails(loc, 'click');
-        await loc.click();
+        // repeat: fuer Zaehler-Widgets (Reisende +/-), die bei jedem Seitenaufruf
+        // beim selben Startwert stehen — die Klickzahl ist damit deterministisch.
+        // repeat kann bewusst 0 sein (z.B. „keine Kinder") — dann gar nicht klicken.
+        const times = step.repeat === undefined
+          ? 1
+          : Math.min(Math.max(Number(substitute(String(step.repeat), agent.params)) || 0, 0), 20);
+        for (let c = 0; c < times; c++) {
+          await loc.first().click();
+          if (c < times - 1) await page!.waitForTimeout(step.ms ?? 250);
+        }
       } else if (step.action === 'fill' && step.selector && step.value !== undefined) {
         const loc = getLocator(page!, substitute(step.selector, agent.params));
         await checkGuardrails(loc, 'fill');
@@ -277,6 +308,22 @@ export async function executeRecipe(
           await getLocator(page!, substitute(step.selector, agent.params)).first().press(step.key);
         } else {
           await page!.keyboard.press(step.key);
+        }
+      } else if (step.action === 'click_until' && step.selector && step.until) {
+        // Klickt (z.B. „naechster Monat"), bis das Ziel im DOM ist. Eine feste
+        // Klickzahl waere zeitabhaengig: der Abstand von heute bis zum Reisedatum
+        // schrumpft mit jedem Tag, und das Recipe wuerde still danebengreifen.
+        const untilSel = substitute(step.until, agent.params);
+        const clickSel = substitute(step.selector, agent.params);
+        const max = Math.min(step.max ?? 24, 60);
+        let hit = false;
+        for (let c = 0; c <= max; c++) {
+          if (await getLocator(page!, untilSel).count() > 0) { hit = true; break; }
+          await getLocator(page!, clickSel).first().click();
+          await page!.waitForTimeout(step.ms ?? 350);
+        }
+        if (!hit && await getLocator(page!, untilSel).count() === 0) {
+          throw new Error(`click_until: „${untilSel}" nach ${max} Klicks auf „${clickSel}" nicht erreicht`);
         }
       } else if (step.action === 'waitFor' && step.selector) {
         await getLocator(page!, substitute(step.selector, agent.params))

@@ -2,10 +2,166 @@
   "id": "idealo-flug",
   "name": "idealo Flug",
   "manifest_id": "flight",
+  "kind": "browser",
   "icon": "plane",
-  "description": "Günstigster Flugpreis über idealo Flug für eine Route.",
-  "site": "https://www.idealo.de/flug/",
-  "goal_template": "Auf idealo Flug den günstigsten Gesamtpreis für {{origin}} → {{dest}} am {{outbound}}{% if inbound %} (Rückflug {{inbound}}){% endif %} für {{adults}} Erwachsene ({{cabin}}) auslesen. Preis, Airline und Anzahl Stopps zurückgeben.",
+  "description": "Günstigster Flugpreis über idealo Flug — pro Person und als Gesamtpreis.",
+  "note": "idealo kennt KEINE Such-URL: Ergebnisse liegen hinter einem Sitzungs-Token (/ergebnis/xyz). Deshalb bedient dieses Recipe die Suchmaske. Es klickt sich mit click_until bis zum Reisemonat vor — die Klickzahl ergibt sich zur Laufzeit, eine feste Zahl würde mit fortschreitendem Datum danebengreifen.",
+  "site": "https://flug.idealo.de/",
+  "goal_template": "Günstigsten Flugpreis für {{origin}} → {{dest}} ({{outbound}}{% if inbound %} / {{inbound}}{% endif %}) bei idealo auslesen.",
   "default_schedule": "0 7 * * *",
-  "version": 1
+  "params": {
+    "_category": "price"
+  },
+  "result_schema": {
+    "type": "object",
+    "properties": {
+      "price": {
+        "type": "number"
+      },
+      "total": {
+        "type": "number"
+      }
+    },
+    "required": [
+      "price"
+    ]
+  },
+  "recipe": [
+    {
+      "action": "goto",
+      "url": "https://flug.idealo.de/"
+    },
+    {
+      "action": "consent",
+      "optional": true
+    },
+    {
+      "action": "waitFor",
+      "selector": "input.stat-search-form-departure",
+      "ms": 45000,
+      "note": "Suchmaske wird clientseitig gerendert — vorher tippt man ins Leere"
+    },
+    {
+      "action": "wait",
+      "ms": 2500,
+      "note": "Autocomplete-JS verdrahten lassen"
+    },
+    {
+      "action": "fill",
+      "selector": "input.stat-search-form-departure",
+      "value": "{{origin}}"
+    },
+    {
+      "action": "wait",
+      "ms": 3200,
+      "note": "Vorschlagsliste laedt per XHR nach"
+    },
+    {
+      "action": "click",
+      "selector": "li[data-qa=\"search-form-airport-selectable\"]"
+    },
+    {
+      "action": "fill",
+      "selector": "input.stat-search-form-arrival",
+      "value": "{{dest}}"
+    },
+    {
+      "action": "wait",
+      "ms": 2500
+    },
+    {
+      "action": "click",
+      "selector": "li[data-qa=\"search-form-airport-selectable\"]",
+      "note": "erster Treffer = Stadt mit allen Flughaefen"
+    },
+    {
+      "action": "click",
+      "selector": "input.stat-search-form-person"
+    },
+    {
+      "action": "wait",
+      "ms": 1200
+    },
+    {
+      "action": "click",
+      "selector": "[class*=\"ControlGroup__Root\"] >> nth=0 >> button >> nth=1",
+      "repeat": "{{adults_clicks}}",
+      "ms": 350,
+      "note": "Erwachsene: Widget startet bei 1"
+    },
+    {
+      "action": "click",
+      "selector": "[class*=\"ControlGroup__Root\"] >> nth=1 >> button >> nth=1",
+      "repeat": "{{children_clicks}}",
+      "ms": 350,
+      "note": "Kinder: Widget startet bei 0"
+    },
+    {
+      "action": "click",
+      "selector": "input.stat-search-form-date"
+    },
+    {
+      "action": "wait",
+      "ms": 1800
+    },
+    {
+      "action": "click_until",
+      "selector": "[aria-label=\"vor\"]",
+      "until": "[data-qa=\"day-button-{{outbound}}\"]",
+      "max": 30,
+      "ms": 350
+    },
+    {
+      "action": "click",
+      "selector": "[data-qa=\"day-button-{{outbound}}\"]"
+    },
+    {
+      "action": "click_until",
+      "selector": "[aria-label=\"vor\"]",
+      "until": "[data-qa=\"day-button-{{inbound}}\"]",
+      "max": 30,
+      "ms": 350
+    },
+    {
+      "action": "click",
+      "selector": "[data-qa=\"day-button-{{inbound}}\"]"
+    },
+    {
+      "action": "wait",
+      "ms": 900
+    },
+    {
+      "action": "click",
+      "selector": "[data-qa=\"search-button\"]"
+    },
+    {
+      "action": "waitFor",
+      "selector": ".js-price",
+      "ms": 120000
+    },
+    {
+      "action": "wait",
+      "ms": 6000,
+      "note": "idealo laedt Angebote schubweise nach"
+    },
+    {
+      "action": "extract",
+      "mode": "dom_map",
+      "fallback": "ai_json",
+      "map": {
+        "price": {
+          "selector": ".js-price",
+          "reduce": "min_number",
+          "regex": "(\\d[\\d.\\s]*)\\s*€",
+          "divide_by": "{{pax_total}}"
+        },
+        "total": {
+          "selector": ".js-price",
+          "reduce": "min_number",
+          "regex": "(\\d[\\d.\\s]*)\\s*€"
+        }
+      }
+    }
+  ],
+  "version": 3
 }
