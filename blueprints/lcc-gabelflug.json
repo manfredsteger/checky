@@ -1,0 +1,69 @@
+{
+  "id": "lcc-gabelflug",
+  "name": "Lufthansa City Center (Gabelflug)",
+  "manifest_id": "flight",
+  "kind": "browser",
+  "icon": "plane",
+  "description": "Flugpreise über Lufthansa City Center — kann als einzige Quelle echte Gabelflüge (hin nach A, zurück ab B).",
+  "note": "Nutzt die Suchmaschine Ypsilon.Net direkt (flr.ypsilon.net), nicht die iframe-Einbettung — der Executor kommt nicht in iframes hinein. Die komplette Suche steht in der URL, geklickt wird nur noch „Suchen\". Preise stehen im Format 911.16 EUR (Punkt als Dezimaltrennzeichen). Für einen normalen Hin-/Rückflug einfach dest_out_code/origin_in_code leer lassen. Gelesen wird der Preis pro Person des ERSTEN Angebots — die Liste ist nach Preis sortiert. Der Gesamtpreis wird bewusst nicht mitgenommen: er stammt sonst aus einem anderen Angebot als der Preis (Kinder kosten weniger, Gesamt ist nicht Preis×Pax).",
+  "site": "https://flr.ypsilon.net/",
+  "goal_template": "Günstigsten Flugpreis {{origin}} → {{dest}} ({{outbound}}{% if inbound %} / {{inbound}}{% endif %}) über Lufthansa City Center auslesen.",
+  "default_schedule": "0 7 * * *",
+  "params": {
+    "_category": "price"
+  },
+  "result_schema": {
+    "type": "object",
+    "properties": {
+      "price": {
+        "type": "number"
+      }
+    },
+    "required": [
+      "price"
+    ]
+  },
+  "recipe": [
+    {
+      "action": "goto",
+      "url": "https://flr.ypsilon.net/?aid=lcc11500&lang=de_DE&conso=lcc24agt&type=openjaw&st=o&flexible_date=0&depapt1={{origin_code}}&dstapt1={{dest_out_code}}&depdate1={{outbound}}&depapt2={{origin_in_code}}&dstapt2={{origin_code}}&depdate2={{inbound}}&adt={{adults}}&chd={{children}}&pax_type=ADT"
+    },
+    {
+      "action": "consent",
+      "optional": true
+    },
+    {
+      "action": "wait",
+      "ms": 2500,
+      "note": "Maske wird aus den URL-Parametern befuellt"
+    },
+    {
+      "action": "click",
+      "selector": "#search_btn"
+    },
+    {
+      "action": "waitFor",
+      "selector": ".price",
+      "ms": 180000,
+      "note": "Konsolidator fragt viele Airlines ab — das dauert"
+    },
+    {
+      "action": "wait",
+      "ms": 8000
+    },
+    {
+      "action": "extract",
+      "mode": "dom_map",
+      "fallback": "ai_json",
+      "map": {
+        "price": {
+          "selector": ".price",
+          "index": 0,
+          "as": "number",
+          "regex": "(\\d+\\.\\d{2})"
+        }
+      }
+    }
+  ],
+  "version": 3
+}

@@ -42,6 +42,11 @@ export function deriveParams(params: Record<string, any>): Record<string, any> {
   // bestimmten Flughafen in eine Stadt"; per origin_kind/dest_kind änderbar.
   const kind = (v: any, dflt: string) => (String(v ?? '').trim().toUpperCase() === 'C' ? 'C'
     : String(v ?? '').trim().toUpperCase() === 'A' ? 'A' : dflt);
+  // Gabelflug (open jaw): hin nach A, zurück ab B. Ohne eigene Angabe ist beides
+  // das normale Ziel — dann verhält sich alles wie ein gewöhnlicher Hin-/Rückflug.
+  p.dest_out_code = asCode(p.dest_out_code, p.dest_out) || p.dest_code;
+  p.origin_in_code = asCode(p.origin_in_code, p.origin_in) || p.dest_code;
+
   p.origin_c24 = `${p.origin_code}-${kind(p.origin_kind, 'A')}`;
   p.dest_c24 = `${p.dest_code}-${kind(p.dest_kind, 'C')}`;
 

@@ -7,7 +7,7 @@ import type { Pool } from 'pg';
 import { getLocator } from './executor.js';
 import { launchBrowser, createContext } from './browser.js';
 import { dismissConsent } from './consent.js';
-import { isAllowedUrl } from './browser.js';
+import { isAllowedUrl, createPage } from './browser.js';
 
 // Buttons/Links, die der Anlern-Agent NIEMALS auslösen darf (SPEC §A.5).
 const DENY_ACTION = /(buchen|kaufen|bezahlen|anmelden|bestellen|einkauf|checkout|\bbuy\b|purchase|\bpay\b|log[- ]?in|sign[- ]?in|anmelden|registrieren|sign[- ]?up)/i;
@@ -392,7 +392,7 @@ export async function runRecorderSession(sessionId: string, agent: any, pool: Po
     browser = await launchBrowser();
     context = await createContext(browser, { viewport: { width: 1440, height: 900 } });
     context.setDefaultTimeout(30000);
-    page = await context.newPage();
+    page = await createPage(browser, context);
     // Domain-Allowlist als zweite Verteidigungslinie.
     // Allowlist NUR für Seitenwechsel. Subressourcen (CDN, Fonts, XHR der
     // Ergebnis-API auf fremden Hosts) müssen durch, sonst bleibt die Seite leer
@@ -507,7 +507,7 @@ export async function runAssistedRecorderSession(sessionId: string, agent: any, 
     browser = await launchBrowser();
     context = await createContext(browser, { viewport: { width: 1440, height: 900 } });
     context.setDefaultTimeout(30000);
-    page = await context.newPage();
+    page = await createPage(browser, context);
     // Allowlist NUR für Seitenwechsel. Subressourcen (CDN, Fonts, XHR der
     // Ergebnis-API auf fremden Hosts) müssen durch, sonst bleibt die Seite leer
     // bzw. kaputt — genau das ließ Anlern-Läufe bisher ins Leere laufen.

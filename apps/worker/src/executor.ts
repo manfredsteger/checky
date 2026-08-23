@@ -2,7 +2,7 @@ import { Browser, BrowserContext, Page, Locator } from 'playwright';
 import path from 'path';
 import fs from 'fs';
 import { jsonSchemaToZod, type AIProvider } from '@checky/shared';
-import { launchBrowser, createContext, isAllowedUrl } from './browser.js';
+import { launchBrowser, createContext, createPage, isAllowedUrl } from './browser.js';
 import { dismissConsent } from './consent.js';
 
 // Ein Ergebnisfeld kann ein schlichter Selektor sein ODER eine Feldspezifikation.
@@ -62,15 +62,32 @@ function substitute(text: string, params: Record<string, any>): string {
   });
 }
 
-// „1.175 €", „889 € /Person", „1 175,50" -> 1175 / 889 / 1175.5
+// Zahl aus einem Text ziehen — deutsche UND englische Schreibweise.
+// Die Reihenfolge der Alternativen ist entscheidend: „911.16" darf nicht als
+// „911" durchrutschen, „1.175" aber auch nicht als 1,175 gelesen werden.
+//   1.175 €            -> 1175      (Punkt + genau 3 Ziffern = Tausender)
+//   841,24 € pro Person -> 841.24   (Komma = Dezimaltrennzeichen)
+//   911.16 EUR         -> 911.16    (Punkt + 1-2 Ziffern = Dezimaltrennzeichen)
+//   889 € /Person      -> 889
 export function parseGermanNumber(text: string): number | null {
   if (!text) return null;
-  const m = text.replace(/\u00a0/g, ' ').match(/-?\d{1,3}(?:[.\s]\d{3})+(?:,\d+)?|-?\d+(?:,\d+)?|-?\d+(?:\.\d+)?/);
+  const t = text.replace(/\u00a0/g, ' ');
+  const m = t.match(
+    /-?\d{1,3}(?:[.\s]\d{3})+(?:,\d+)?/.source        // 1.175  /  3.364,94
+    + '|' + /-?\d+,\d+/.source                          // 841,24
+    + '|' + /-?\d+\.\d{1,2}(?!\d)/.source              // 911.16
+    + '|' + /-?\d+/.source                               // 889
+    ,
+  ) as RegExpMatchArray | null;
   if (!m) return null;
-  let t = m[0].replace(/\s/g, '');
-  if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.');       // 1.175,50 -> 1175.50
-  else if (/\.\d{3}(?:\D|$)/.test(t) || /^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, ''); // 1.175 -> 1175
-  const n = Number(t);
+
+  let raw = m[0].replace(/\s/g, '');
+  if (raw.includes(',')) {
+    raw = raw.replace(/\./g, '').replace(',', '.');      // deutsche Schreibweise
+  } else if (/\.\d{3}(?!\d)/.test(raw)) {
+    raw = raw.replace(/\./g, '');                        // reine Tausenderpunkte
+  }
+  const n = Number(raw);
   return Number.isFinite(n) ? n : null;
 }
 
@@ -170,7 +187,7 @@ export async function executeRecipe(
     context.setDefaultTimeout(120000);
     context.setDefaultNavigationTimeout(120000);
     
-    page = await context.newPage();
+    page = await createPage(browser, context);
 
     // Guardrail: Domain-Allowlist NUR für Seitenwechsel (Dokument-Navigationen).
     // Subressourcen (CDN-Skripte, Fonts, XHR zu API-Hosts) müssen durch — sonst
@@ -373,6 +390,14 @@ export async function executeRecipe(
         stepsLog.push({ step: workingSteps[i], duration: Date.now() - startTimer, error: stepError, healed: stepHealed });
       }
     }
+
+    // Live-Link merken: die Seite, auf der die Werte tatsächlich standen — bei
+    // Deep-Link-Quellen die fertig ausgefüllte Ergebnisliste. Damit kann das
+    // Dashboard später „Zum Angebot" anbieten und man sieht dasselbe im Browser.
+    try {
+      const finalUrl = page.url();
+      if (/^https?:\/\//.test(finalUrl)) resultData._url = finalUrl;
+    } catch { /* ohne Link ist auch gut */ }
 
     // "after"-Screenshot
     await page.screenshot({ path: screenshotAfterPath });

@@ -22,6 +22,8 @@ const CMP_SELECTORS = [
   '.cmpbox', '#cmpwrapper',
   // Check24: eigener Layer, der sonst jeden Klick abfängt.
   '.c24-cookie-consent-wrapper', '.c24-strict-blocking-layer',
+  // CCM19 (verbreitet auf deutschen Mittelstandsseiten, z.B. Lufthansa City Center)
+  '#ccm-widget', '.ccm-root', '#ccm-control-panel',
 ];
 
 /**
@@ -60,12 +62,26 @@ async function dismissConsentOnce(page: Page): Promise<string> {
       // Check24 kocht sein eigenes Süppchen: „fam" = alle akzeptieren. Die
       // Buttons sind <a onclick=…>, deshalb greift die Button-Suche unten nicht.
       try { if (w.Check24?.cookieBanner?.c24consent?.giveConsent) { w.Check24.cookieBanner.c24consent.giveConsent('fam'); done.push('check24'); } } catch { /* ignore */ }
+      try { if (w.CCM?.acceptAllCookies) { w.CCM.acceptAllCookies(); done.push('ccm19'); }
+            else { const btn = document.querySelector('#ccm-widget--buttonAccept, .ccm--decline-cookies + button, [data-ccm-modal] button[data-full-consent]') as HTMLElement | null;
+                   if (btn) { btn.click(); done.push('ccm19-klick'); } } } catch { /* ignore */ }
       // Stufe 2: Overlay-Reste entfernen, damit nichts mehr den Klick abfängt.
       for (const s of sels) {
         document.querySelectorAll(s).forEach(el => { try { el.remove(); done.push('removed:' + s); } catch { /* ignore */ } });
       }
-      // Scroll-Sperre lösen, die viele CMPs auf <body> setzen.
-      try { document.documentElement.style.overflow = ''; document.body.style.overflow = ''; } catch { /* ignore */ }
+      // Sperren lösen, die CMPs auf <html>/<body> hinterlassen: Scroll-Stopp und
+      // Klassen wie CCM19s „ccm-blocked", die per CSS alle Zeiger-Ereignisse
+      // abfangen — das Banner ist dann weg, die Seite bleibt aber unbedienbar.
+      try {
+        document.documentElement.style.overflow = '';
+        document.body.style.overflow = '';
+        for (const el of [document.documentElement, document.body]) {
+          for (const c of Array.from(el.classList)) {
+            if (/ccm-blocked|cmp-?blocked|no-?scroll|modal-open|overflow-hidden/i.test(c)) el.classList.remove(c);
+          }
+        }
+        document.body.style.pointerEvents = '';
+      } catch { /* ignore */ }
       return done;
     }, CMP_SELECTORS);
     if (viaApi.length) notes.push(...viaApi.slice(0, 4));

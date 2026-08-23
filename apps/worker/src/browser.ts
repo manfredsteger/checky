@@ -1,4 +1,4 @@
-import { chromium, Browser, BrowserContext } from 'playwright';
+import { chromium, Browser, BrowserContext, Page } from 'playwright';
 
 // Zentraler, tarnender Browser-Start für Executor UND Recorder.
 // Stufe 1 der Anti-Detection: Headful (Xvfb), Launch-Args, realistischer
@@ -6,13 +6,14 @@ import { chromium, Browser, BrowserContext } from 'playwright';
 
 const STEALTH = process.env.STEALTH !== 'false';
 
-// Linux-Chrome-UA (passt zum tatsächlichen Plattform-Fingerprint des jammy-Images;
-// ein Windows-UA auf Linux-Plattform wäre selbst ein Erkennungsmerkmal).
-const DEFAULT_UA =
-  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36';
-const UA = process.env.STEALTH_UA || DEFAULT_UA;
+// Wir lassen den Browser seinen ECHTEN User-Agent senden. Ein fest verdrahteter
+// UA-String veraltet und widerspricht dann allem anderen (Client Hints, JS-
+// Features, Chrome-Version) — genau solche Widersprüche sucht ein Bot-Schutz.
+// STEALTH_UA bleibt als Notausgang, falls doch mal einer nötig ist.
+const UA_OVERRIDE = process.env.STEALTH_UA || undefined;
 
 const STEALTH_ARGS = [
+  // Setzt navigator.webdriver auf false — mehr braucht es dafür nicht.
   '--disable-blink-features=AutomationControlled',
   '--no-sandbox',
   '--disable-dev-shm-usage',
@@ -24,27 +25,28 @@ const STEALTH_ARGS = [
   '--disable-features=IsolateOrigins,site-per-process',
 ];
 
-// Klassische Evasions, die vor jeder Seite laufen.
+// Nur EINE Korrektur, und zwar eine belegte: unter Xvfb rendert Chromium per
+// SwiftShader (Software) und verrät das über WEBGL_debug_renderer_info. Echte
+// Rechner nennen dort eine GPU. Die Ersatzwerte müssen zur Plattform passen —
+// eine macOS-GPU auf „Linux x86_64" wäre ihrerseits ein Widerspruch.
+//
+// Absichtlich NICHT mehr angefasst (jeweils nachgemessen, nativ schon korrekt):
+//   navigator.webdriver  -> false (nicht undefined! undefined ist selbst ein Tell)
+//   navigator.plugins    -> 5
+//   window.chrome        -> object
+//   navigator.languages  -> folgt der locale des Kontexts
 const EVASIONS = `
   try {
-    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-    window.chrome = window.chrome || { runtime: {} };
-    Object.defineProperty(navigator, 'languages', { get: () => ['de-DE','de','en-US','en'] });
-    Object.defineProperty(navigator, 'plugins', { get: () => [1,2,3,4,5] });
-    const _q = window.navigator.permissions && window.navigator.permissions.query;
-    if (_q) {
-      window.navigator.permissions.query = (p) =>
-        p && p.name === 'notifications'
-          ? Promise.resolve({ state: Notification.permission })
-          : _q(p);
-    }
-    // WebGL-Vendor/Renderer plausibel halten
     const _gp = WebGLRenderingContext.prototype.getParameter;
-    WebGLRenderingContext.prototype.getParameter = function (p) {
-      if (p === 37445) return 'Intel Inc.';
-      if (p === 37446) return 'Intel Iris OpenGL Engine';
+    const patch = function (p) {
+      if (p === 37445) return 'Google Inc. (Intel)';
+      if (p === 37446) return 'ANGLE (Intel, Mesa Intel(R) UHD Graphics (CML GT2), OpenGL 4.6 (Core Profile) Mesa 23.2.1)';
       return _gp.call(this, p);
     };
+    WebGLRenderingContext.prototype.getParameter = patch;
+    if (typeof WebGL2RenderingContext !== 'undefined') {
+      WebGL2RenderingContext.prototype.getParameter = patch;
+    }
   } catch (e) { /* best effort */ }
 `;
 
@@ -62,13 +64,51 @@ export async function launchBrowser(): Promise<Browser> {
   });
 }
 
+// --- Client Hints geradeziehen ---------------------------------------------
+// Der UA-String allein reicht heute nicht: Chrome verrät über die User-Agent
+// Client Hints zusätzlich Marken und Architektur. Zwei Widersprüche entstehen
+// dort ungewollt und sind für einen Bot-Schutz gut sichtbar:
+//   1. brands nennt nur „Chromium" — echtes Chrome führt „Google Chrome" mit.
+//      Für Linux/ARM gibt es kein Google Chrome, wir MÜSSEN Chromium fahren.
+//   2. architecture meldet „arm" (Container auf Apple Silicon), während der
+//      UA-String „Linux x86_64" sagt.
+// Beides hier angleichen — das entfernt Widersprüche, statt neue zu schaffen.
+async function alignClientHints(page: Page, version: string): Promise<void> {
+  const major = version.split('.')[0] || '';
+  const ua = UA_OVERRIDE
+    || `Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${major}.0.0.0 Safari/537.36`;
+  try {
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Emulation.setUserAgentOverride', {
+      userAgent: ua,
+      acceptLanguage: 'de-DE,de;q=0.9,en;q=0.8',
+      platform: 'Linux x86_64',
+      userAgentMetadata: {
+        brands: [
+          { brand: 'Not(A:Brand', version: '99' },
+          { brand: 'Google Chrome', version: major },
+          { brand: 'Chromium', version: major },
+        ],
+        fullVersion: version,
+        platform: 'Linux',
+        platformVersion: '6.8.0',
+        architecture: 'x86',
+        model: '',
+        mobile: false,
+        bitness: '64',
+        wow64: false,
+      },
+    } as any);
+  } catch { /* best effort — lieber ohne als gar kein Browser */ }
+}
+
 export interface ContextOpts {
   viewport?: { width: number; height: number };
 }
 
 export async function createContext(browser: Browser, opts: ContextOpts = {}): Promise<BrowserContext> {
   const context = await browser.newContext({
-    userAgent: STEALTH ? UA : undefined,
+    userAgent: UA_OVERRIDE,
     viewport: opts.viewport ?? { width: 1920, height: 1080 },
     locale: 'de-DE',
     timezoneId: 'Europe/Berlin',
@@ -110,4 +150,15 @@ export function isAllowedUrl(url: string, allowedHost: string): boolean {
   try { host = new URL(url).hostname; } catch { return false; }
   const base = registrableDomain(allowedHost);
   return host === base || host.endsWith('.' + base);
+}
+
+/**
+ * Seite anlegen und die Client Hints angleichen — VOR dem ersten Laden, sonst
+ * hat die Seite ihre Werte schon gelesen. Executor und Recorder nutzen das
+ * statt context.newPage().
+ */
+export async function createPage(browser: Browser, context: BrowserContext): Promise<Page> {
+  const page = await context.newPage();
+  if (STEALTH) await alignClientHints(page, browser.version());
+  return page;
 }

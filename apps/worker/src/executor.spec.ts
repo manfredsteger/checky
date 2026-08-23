@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { executeRecipe, Recipe, Step } from './executor.js';
+import { executeRecipe, parseGermanNumber, Recipe, Step } from './executor.js';
 import * as playwright from 'playwright';
 import path from 'path';
 
@@ -23,9 +23,18 @@ describe('Recipe Player Executor', () => {
       click: vi.fn(),
       fill: vi.fn(),
       waitFor: vi.fn(),
+      count: vi.fn().mockResolvedValue(1),
+      getAttribute: vi.fn().mockResolvedValue(null),
+      pressSequentially: vi.fn(),
+      press: vi.fn(),
       textContent: vi.fn().mockResolvedValue('Mock Text'),
+      innerText: vi.fn().mockResolvedValue('Mock Text'),
+      ariaSnapshot: vi.fn().mockResolvedValue(''),
       evaluate: vi.fn().mockResolvedValue(true)
     };
+    // first()/nth() liefern denselben Mock zurück — der Executor kettet darauf.
+    mockLocator.first = vi.fn().mockReturnValue(mockLocator);
+    mockLocator.nth = vi.fn().mockReturnValue(mockLocator);
     
     mockPage = {
       goto: vi.fn(),
@@ -35,18 +44,31 @@ describe('Recipe Player Executor', () => {
       getByPlaceholder: vi.fn().mockReturnValue(mockLocator),
       getByTestId: vi.fn().mockReturnValue(mockLocator),
       route: vi.fn(),
-      screenshot: vi.fn()
+      screenshot: vi.fn(),
+      waitForTimeout: vi.fn(),
+      keyboard: { press: vi.fn(), type: vi.fn() },
+      evaluate: vi.fn().mockResolvedValue(undefined),
+      frames: vi.fn().mockReturnValue([]),
+      mainFrame: vi.fn(),
+      context: vi.fn(),
+      url: vi.fn().mockReturnValue('https://example.com/ergebnis')
     };
     
     mockContext = {
       newPage: vi.fn().mockResolvedValue(mockPage),
       setDefaultTimeout: vi.fn(),
       setDefaultNavigationTimeout: vi.fn(),
+      // Tarn-Schicht: Init-Skript + CDP-Sitzung für die Client Hints.
+      addInitScript: vi.fn(),
+      newCDPSession: vi.fn().mockResolvedValue({ send: vi.fn(), detach: vi.fn() }),
+      cookies: vi.fn().mockResolvedValue([]),
       close: vi.fn()
     };
-    
+    mockPage.context.mockReturnValue(mockContext);
+
     mockBrowser = {
       newContext: vi.fn().mockResolvedValue(mockContext),
+      version: vi.fn().mockReturnValue('151.0.7922.34'),
       close: vi.fn()
     };
     
@@ -71,7 +93,10 @@ describe('Recipe Player Executor', () => {
     await executeRecipe(agent, recipe, 'run-123');
     
     expect(mockPage.goto).toHaveBeenCalledWith('https://example.com/?q=MUC', expect.any(Object));
-    expect(mockLocator.fill).toHaveBeenCalledWith('Hello World');
+    // fill() leert nur; der Wert wird per echten Tastenanschlägen eingegeben,
+    // damit Autocomplete-Listen überhaupt aufgehen.
+    expect(mockLocator.fill).toHaveBeenCalledWith('');
+    expect(mockLocator.pressSequentially).toHaveBeenCalledWith('Hello World', expect.any(Object));
   });
 
   it('(b) should parse locator strings properly', async () => {
@@ -142,4 +167,25 @@ describe('Recipe Player Executor', () => {
     expect(mockPage.locator).toHaveBeenCalledWith('.price');
     expect(mockLocator.textContent).toHaveBeenCalled();
   });
+});
+
+describe('parseGermanNumber', () => {
+  const cases: Array<[string, number | null]> = [
+    ['911.16', 911.16],            // englische Dezimalschreibweise (Ypsilon/LCC)
+    ['3487.48 ', 3487.48],
+    ['1023.32', 1023.32],
+    ['1.175 €', 1175],             // deutscher Tausenderpunkt
+    ['3.364,94 €', 3364.94],
+    ['841,24 € pro Person', 841.24],
+    ['889 € /Person', 889],
+    ['1.094,64 € pro Person', 1094.64],
+    ['134,20', 134.2],
+    ['Ab 4.207 €', 4207],
+    ['kein Preis', null],
+  ];
+  for (const [input, expected] of cases) {
+    it(`liest "${input}" als ${expected}`, () => {
+      expect(parseGermanNumber(input)).toBe(expected);
+    });
+  }
 });
