@@ -24,6 +24,21 @@ if (dbUrl) {
   pool.on('error', (err: Error) => {
     console.error('[Worker] Datenbank-Verbindung verloren (wird neu aufgebaut):', err.message);
   });
+
+  // Verwaiste Läufe aufräumen. Stirbt der Worker mitten in einem Lauf (Absturz,
+  // Neustart, Deploy), bleibt dessen Zeile auf 'running' stehen — im Dashboard
+  // dreht sich dann für immer ein Spinner. Beim Start gibt es keinen laufenden
+  // Lauf, also sind alle 'running' von vorhin und werden ehrlich als
+  // abgebrochen markiert.
+  try {
+    const orphans = await pool.query(
+      `UPDATE runs SET status='failed', finished_at=NOW(),
+              error=COALESCE(error, 'Abgebrochen: der Worker wurde neu gestartet (Absturz oder Deploy).')
+       WHERE status IN ('running','queued') RETURNING id`);
+    if (orphans.rowCount) console.log(`[Worker] ${orphans.rowCount} verwaiste Läufe aufgeräumt`);
+  } catch (e) {
+    console.error('[Worker] Aufräumen verwaister Läufe fehlgeschlagen:', e);
+  }
   boss = new PgBoss(dbUrl);
   boss.on('error', (error: any) => console.error('[pg-boss error]', error));
 }
