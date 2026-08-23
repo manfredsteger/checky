@@ -63,10 +63,16 @@ async function start() {
   // Agenten minutenlang auf „wartet auf Worker". Der Deckel bleibt niedrig,
   // weil jeder Lauf ein eigenes Chromium startet (Arbeitsspeicher!).
   const CONCURRENCY = Math.max(1, Math.min(Number(process.env.RUN_CONCURRENCY ?? 3), 6));
-  await boss.work('agent-run', { batchSize: CONCURRENCY }, async (jobs: any[]) => {
-    await Promise.allSettled(jobs.map(job => handleJob(job)));
-  });
-  console.log(`[Worker] Bis zu ${CONCURRENCY} Läufe gleichzeitig`);
+  // Bewusst N EIGENSTÄNDIGE Arbeiter statt eines mit batchSize N: bei einem
+  // Stapel holt pg-boss erst dann Nachschub, wenn der GANZE Stapel fertig ist —
+  // ein langsamer Lauf (Lufthansa City Center braucht ~3 min) legt dann alle
+  // anderen still. Eigene Arbeiter ziehen unabhängig voneinander nach.
+  for (let i = 0; i < CONCURRENCY; i++) {
+    await boss.work('agent-run', { batchSize: 1 }, async (jobs: any[]) => {
+      for (const job of jobs) await handleJob(job);
+    });
+  }
+  console.log(`[Worker] ${CONCURRENCY} Läufe gleichzeitig möglich`);
 
   // Recorder-Queue: Anlern-Sessions (langlaufend, bis 5 min)
   await boss.createQueue('recorder').catch(() => {});

@@ -397,6 +397,20 @@ export async function executeRecipe(
       }
     }
 
+    // Plausibilität prüfen. Findet eine Quelle zu den Filtern nichts, zeigt sie
+    // gern trotzdem IRGENDETWAS an (Kayak lieferte bei „nur Direktflug" nach
+    // Ziel 3005 € statt einer Fehlanzeige). Ein Wert weit jenseits der eigenen
+    // Schmerzgrenze ist fast immer so ein Artefakt — markieren statt still
+    // speichern. Nur markieren, nicht verwerfen: Preise dürfen auch mal echt
+    // springen, das zu entscheiden ist Sache des Nutzers.
+    try {
+      const limit = Number(agent.params?.max_price);
+      const head = Number(resultData.price);
+      if (Number.isFinite(limit) && limit > 0 && Number.isFinite(head) && head > limit * 3) {
+        resultData._suspect = `Wert liegt mehr als dreifach über der Schmerzgrenze (${limit} €) — die Quelle hat zu diesen Filtern vermutlich nichts gefunden und etwas anderes angezeigt.`;
+      }
+    } catch { /* ohne Prüfung weiter */ }
+
     // Live-Link merken: die Seite, auf der die Werte tatsächlich standen — bei
     // Deep-Link-Quellen die fertig ausgefüllte Ergebnisliste. Damit kann das
     // Dashboard später „Zum Angebot" anbieten und man sieht dasselbe im Browser.
