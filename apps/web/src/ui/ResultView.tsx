@@ -59,7 +59,7 @@ export function ResultView({ results, resolved, size = 'sm' }: {
         {(last.data as any)?._suspect && (
           <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-red-500/15 text-red-300"
             title={String((last.data as any)._suspect)}>
-            unplausibel
+            prüfen
           </span>
         )}
         {(last.data as any)?._ai && (

@@ -397,17 +397,17 @@ export async function executeRecipe(
       }
     }
 
-    // Plausibilität prüfen. Findet eine Quelle zu den Filtern nichts, zeigt sie
-    // gern trotzdem IRGENDETWAS an (Kayak lieferte bei „nur Direktflug" nach
-    // Ziel 3005 € statt einer Fehlanzeige). Ein Wert weit jenseits der eigenen
-    // Schmerzgrenze ist fast immer so ein Artefakt — markieren statt still
-    // speichern. Nur markieren, nicht verwerfen: Preise dürfen auch mal echt
-    // springen, das zu entscheiden ist Sache des Nutzers.
+    // Auffällig hohe Werte kennzeichnen. Zwei Ursachen kommen in Frage, und
+    // beide will man sehen: entweder hat die Quelle zu den eingestellten Filtern
+    // nichts gefunden und zeigt ersatzweise etwas anderes an — oder der Preis
+    // ist echt, aber die Filter lassen nur teure Angebote übrig (nach New York
+    // gibt es nonstop nur Premium Economy für 1200 € statt 480 € mit einem Stopp).
+    // Deshalb nur markieren und erklären, nicht verwerfen.
     try {
       const limit = Number(agent.params?.max_price);
       const head = Number(resultData.price);
       if (Number.isFinite(limit) && limit > 0 && Number.isFinite(head) && head > limit * 3) {
-        resultData._suspect = `Wert liegt mehr als dreifach über der Schmerzgrenze (${limit} €) — die Quelle hat zu diesen Filtern vermutlich nichts gefunden und etwas anderes angezeigt.`;
+        resultData._suspect = `Weit über der Schmerzgrenze (${limit} €). Entweder lassen die Filter nur teure Angebote übrig (z.B. „nur Direktflug" auf einer Strecke, die nonstop nur in höherer Klasse angeboten wird), oder die Quelle hat nichts Passendes gefunden und zeigt ersatzweise etwas anderes. Bitte über „Zum Angebot" nachsehen.`;
       }
     } catch { /* ohne Prüfung weiter */ }
 
