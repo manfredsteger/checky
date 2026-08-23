@@ -114,7 +114,7 @@ export default function CreateAgent() {
   });
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 bg-[#0a0a0b] text-[#d1d5db]">
+    <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-[#0a0a0b] text-[#d1d5db]">
       <header className='h-16 border-b border-[#1f2937] flex items-center justify-between px-8 bg-[#0a0a0b] shrink-0'>
         <div className='flex items-center gap-2 text-sm'>
           <Link to={`/projects/${projectId}`} className='text-[#6b7280] hover:text-white transition-colors'>Zurück zum Projekt</Link>
@@ -123,7 +123,7 @@ export default function CreateAgent() {
         </div>
       </header>
 
-      <div className="p-8 max-w-3xl mx-auto w-full overflow-y-auto">
+      <div className="p-8 max-w-3xl mx-auto w-full flex-1 min-h-0 overflow-y-auto">
         <h1 className="text-2xl font-bold text-white mb-6">Agent anlegen</h1>
 
         {(blueprintsQ.data?.length ?? 0) > 0 && (

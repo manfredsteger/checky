@@ -69,7 +69,7 @@ export default function Layout() {
           </div>
         </nav>
       </aside>
-      <main className='flex-1 flex flex-col min-w-0'>
+      <main className='flex-1 flex flex-col min-w-0 min-h-0'>
         <Outlet />
       </main>
     </div>

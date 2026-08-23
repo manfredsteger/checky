@@ -98,7 +98,7 @@ export default function AgentResults() {
   if (isLoading) return <div className="p-8 text-center text-[#6b7280]">Lade Ergebnisse…</div>;
 
   return (
-    <div className="flex-1 flex flex-col bg-[#0a0a0b] text-[#d1d5db] overflow-auto">
+    <div className="flex-1 min-h-0 flex flex-col bg-[#0a0a0b] text-[#d1d5db] overflow-auto">
       <header className="h-16 border-b border-[#1f2937] flex items-center justify-between px-8 shrink-0">
         <div>
           <div className="text-sm text-white font-medium">Ergebnisse — {agent?.name}</div>

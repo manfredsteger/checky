@@ -54,7 +54,7 @@ export default function SettingsPage() {
   const paused = settings.data?.paused ?? false;
 
   return (
-    <div className="flex-1 flex flex-col bg-[#0a0a0b] text-white overflow-auto">
+    <div className="flex-1 min-h-0 flex flex-col bg-[#0a0a0b] text-white overflow-auto">
       <header className="h-16 border-b border-[#1f2937] flex items-center px-8 shrink-0">
         <h1 className="text-lg font-bold">Einstellungen</h1>
       </header>

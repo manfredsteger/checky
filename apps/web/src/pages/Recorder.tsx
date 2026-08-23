@@ -66,7 +66,7 @@ export default function RecorderPage() {
   const isAssisted = s?.mode === 'assisted';
 
   return (
-    <div className="flex-1 flex flex-col bg-[#0a0a0b] text-white p-6 gap-4 overflow-auto">
+    <div className="flex-1 min-h-0 flex flex-col bg-[#0a0a0b] text-white p-6 gap-4 overflow-auto">
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
           <Link to={`/projects/${projectId}`} className="text-xs text-[#6b7280] hover:text-emerald-400 inline-flex items-center gap-1 mb-1">← {projectQ.data?.name ?? 'Projekt'}</Link>

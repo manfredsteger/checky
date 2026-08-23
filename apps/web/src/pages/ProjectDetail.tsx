@@ -61,7 +61,9 @@ function AgentCard({ agent, projectId, resolved, onToggle, onTrigger, onEdit, on
       {activity && <RunProgressBar activity={activity} className="absolute inset-x-0 top-0 rounded-none" />}
 
       <div className="flex justify-between items-start gap-2">
-        <div className="flex items-center gap-2">
+        {/* Abzeichen dürfen umbrechen, die Aktionen nicht — sonst wird bei vielen
+            Abzeichen („Nicht angelernt") der Aktivieren-Knopf abgeschnitten. */}
+        <div className="flex items-center gap-2 flex-wrap min-w-0">
           <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${prio.cls}`}>{prio.label}</span>
           {activity
             ? <RunStatusChip activity={activity} />
@@ -76,7 +78,7 @@ function AgentCard({ agent, projectId, resolved, onToggle, onTrigger, onEdit, on
             <span className={`px-2 py-0.5 text-[10px] font-bold rounded uppercase tracking-wider ${categoryOf((agent.params as any)?._category)!.badge}`}>{categoryOf((agent.params as any)?._category)!.label}</span>
           )}
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 shrink-0">
           <button onClick={() => onEdit(agent)} title="Agent bearbeiten"
             className="text-[#6b7280] hover:text-white bg-[#1f2937] hover:bg-[#374151] p-1.5 rounded">
             <Settings2 className="w-3.5 h-3.5" />
@@ -224,7 +226,7 @@ export default function ProjectDetail() {
   const error = projectError || agentsError;
   if (error) {
     return (
-      <div className="p-8 flex-1 overflow-auto">
+      <div className="p-8 flex-1 min-h-0 overflow-auto">
         <div className="bg-red-900/20 border border-red-500/50 text-red-200 p-4 rounded-xl">
           <p className="font-bold">Datenbank-Verbindungsfehler</p>
           <p className="text-sm mt-1">{error instanceof Error ? error.message : 'Die Datenbank ist nicht erreichbar.'}</p>
@@ -244,7 +246,7 @@ export default function ProjectDetail() {
   const visible = catFilter ? sorted?.filter(a => (a.params as any)?._category === catFilter) : sorted;
 
   return (
-    <div className="flex-1 flex flex-col min-w-0">
+    <div className="flex-1 flex flex-col min-w-0 min-h-0">
       <header className="relative h-16 border-b border-[#1f2937] flex items-center justify-between px-8 bg-[#0a0a0b] shrink-0">
         {/* Laufender Balken über die ganze Breite: „im Projekt passiert gerade etwas". */}
         {projectActivity.active && (
@@ -292,7 +294,7 @@ export default function ProjectDetail() {
         </div>
       </header>
 
-      <section className="flex-1 p-8 overflow-y-auto">
+      <section className="flex-1 min-h-0 p-8 overflow-y-auto">
         {project.description && <p className="text-sm text-[#9ca3af] mb-6 max-w-3xl">{project.description}</p>}
         {overviewOpen && agents && agents.length > 0 && (
           <ProjectOverview project={project} agents={agents} manifest={manifest} />

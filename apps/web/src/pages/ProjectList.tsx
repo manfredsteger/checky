@@ -72,7 +72,7 @@ export default function ProjectList() {
   });
 
   return (
-    <div className="p-8 flex-1 overflow-auto">
+    <div className="p-8 flex-1 min-h-0 overflow-auto">
       <h1 className="text-2xl font-bold text-white mb-6">Alle Projekte</h1>
       
       {error ? (
