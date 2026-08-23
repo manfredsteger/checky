@@ -3,7 +3,7 @@ import { api } from '../api/client';
 import { useParams, Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import { useMemo, useState } from 'react';
-import { Download } from 'lucide-react';
+import { Download, ExternalLink } from 'lucide-react';
 import type { EChartsOption } from 'echarts';
 import { resolveDisplay, toNumber } from '../lib/resultDisplay';
 import { ResultView } from '../ui/ResultView';
@@ -97,6 +97,10 @@ export default function AgentResults() {
 
   if (isLoading) return <div className="p-8 text-center text-[#6b7280]">Lade Ergebnisse…</div>;
 
+  // Live-Link des letzten Laufs: Buchungslink der API-Quelle, sonst die Seite,
+  // auf der die Werte tatsächlich standen.
+  const liveUrl: string | undefined = (latest?.data as any)?.booking_url || (latest?.data as any)?._url;
+
   return (
     <div className="flex-1 min-h-0 flex flex-col bg-[#0a0a0b] text-[#d1d5db] overflow-auto">
       <header className="h-16 border-b border-[#1f2937] flex items-center justify-between px-8 shrink-0">
@@ -105,6 +109,13 @@ export default function AgentResults() {
           <div className="text-xs text-[#6b7280] font-mono">{agent?.site}</div>
         </div>
         <div className="flex gap-2">
+          {liveUrl && (
+            <a href={liveUrl} target="_blank" rel="noopener noreferrer"
+              title="Diese Suche im Browser öffnen — fertig ausgefüllt"
+              className="flex items-center gap-2 px-3 py-1.5 bg-emerald-600/15 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 rounded text-xs font-bold">
+              Zum Angebot <ExternalLink className="w-3.5 h-3.5" />
+            </a>
+          )}
           <button onClick={() => download('csv')} className="flex items-center gap-2 px-3 py-1.5 bg-[#1f2937] hover:bg-[#374151] rounded text-xs font-medium"><Download className="w-3.5 h-3.5" /> CSV</button>
           <button onClick={() => download('json')} className="flex items-center gap-2 px-3 py-1.5 bg-[#1f2937] hover:bg-[#374151] rounded text-xs font-medium"><Download className="w-3.5 h-3.5" /> JSON</button>
         </div>

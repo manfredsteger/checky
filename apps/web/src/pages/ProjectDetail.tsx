@@ -6,7 +6,7 @@ import { useToast } from '../ui/toast';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { ProjectParamsEditor } from '../ui/ProjectParamsEditor';
 import { AgentParamsEditor } from '../ui/AgentParamsEditor';
-import { Settings2, LineChart, Loader2, Trash2 } from 'lucide-react';
+import { Settings2, LineChart, Loader2, Trash2, ExternalLink } from 'lucide-react';
 import { ProjectOverview } from '../ui/ProjectOverview';
 import { CronExpressionParser } from 'cron-parser';
 import { format } from 'date-fns';
@@ -51,6 +51,9 @@ function AgentCard({ agent, projectId, resolved, onToggle, onTrigger, onEdit, on
   const fields = last ? Object.keys(last.data || {}).filter(k => !k.startsWith('_') && k !== resolved.headlineField).slice(0, 3) : [];
   // API-Quellen (provider) brauchen kein angelerntes Recipe.
   const notLearned = agent.has_recipe === false && !agent.provider;
+  // „Zum Angebot": Buchungslink der API-Quelle, sonst die Seite, auf der die
+  // Werte im letzten Lauf tatsächlich standen (vom Executor mitgeschrieben).
+  const liveUrl: string | undefined = (last?.data as any)?.booking_url || (last?.data as any)?._url;
 
   return (
     <div className={`relative bg-[#111827] border p-5 rounded-xl flex flex-col gap-3 overflow-hidden transition-colors
@@ -99,7 +102,7 @@ function AgentCard({ agent, projectId, resolved, onToggle, onTrigger, onEdit, on
       </div>
       <p className="text-xs text-[#9ca3af] line-clamp-2" title={agent.goal_text}>{agent.goal_text}</p>
 
-      {/* Letztes Ergebnis */}
+      {/* Letztes Ergebnis — mit Direktlink auf genau diese Suche */}
       <div className="rounded-lg bg-[#0f151f] border border-[#1f2937] px-3 py-2 min-h-[42px]">
         {last ? (
           hasHeadline ? (
@@ -116,6 +119,13 @@ function AgentCard({ agent, projectId, resolved, onToggle, onTrigger, onEdit, on
           <span className="text-xs text-amber-300/90">⚠ Noch nicht angelernt — erst per „Anlernen" ein Recipe aufnehmen, dann kommen Ergebnisse.</span>
         ) : (
           <span className="text-xs text-[#6b7280]">Noch kein Ergebnis</span>
+        )}
+        {liveUrl && (
+          <a href={liveUrl} target="_blank" rel="noopener noreferrer"
+            title="Diese Suche im Browser öffnen — Route, Datum und Reisende sind schon eingetragen"
+            className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-400 hover:text-emerald-300 hover:underline">
+            Zum Angebot <ExternalLink className="w-3 h-3" />
+          </a>
         )}
       </div>
 
