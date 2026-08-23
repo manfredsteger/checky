@@ -5,6 +5,7 @@ import { executeRecipe } from './executor.js';
 import { ClaudeAgentProvider } from './aiProvider.js';
 import { runRecorderSession, runAssistedRecorderSession } from './recorder.js';
 import { deriveParams } from './params.js';
+import { searchKeyOf, searchParamsOf } from '@checky/shared';
 import { enqueueNotification, processOutbox, runCleanup, checkRateLimit } from './notify.js';
 import { fetchProvider } from './providers/index.js';
 
@@ -162,6 +163,11 @@ async function handleJob(job: any) {
     const { rows: pr } = await pool!.query('SELECT params FROM projects WHERE id = $1', [agent.project_id]);
     agent.params = { ...(pr[0]?.params || {}), ...(agent.params || {}) };
   } catch { /* Fallback: nur Agent-Params */ }
+  // Fingerabdruck der Suche VOR der Ableitung bilden: abgeleitete Werte sind
+  // reine Funktionen der Originale, und so kann die API denselben Schlüssel
+  // berechnen, ohne die Ableitungslogik zu kennen.
+  const searchKey = searchKeyOf(agent.params);
+  const searchParams = searchParamsOf(agent.params);
   agent.params = deriveParams(agent.params);
 
   // 3. Jitter for cron jobs
@@ -200,11 +206,13 @@ async function handleJob(job: any) {
       const canonicalStr = JSON.stringify(resultData, Object.keys(resultData).sort());
       const data_hash = crypto.createHash('sha256').update(canonicalStr).digest('hex');
       const { rows: last } = await pool!.query(
-        `SELECT data_hash FROM results WHERE agent_id = $1 ORDER BY created_at DESC LIMIT 1`, [agent_id]);
+        `SELECT data_hash FROM results WHERE agent_id = $1 AND search_key IS NOT DISTINCT FROM $2
+         ORDER BY created_at DESC LIMIT 1`, [agent_id, searchKey]);
       const changed = last.length === 0 || last[0].data_hash !== data_hash;
       await pool!.query(
-        `INSERT INTO results (run_id, agent_id, data, data_hash, changed) VALUES ($1, $2, $3, $4, $5)`,
-        [run_id, agent_id, JSON.stringify(resultData), data_hash, changed]);
+        `INSERT INTO results (run_id, agent_id, data, data_hash, changed, search_key, search_params)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [run_id, agent_id, JSON.stringify(resultData), data_hash, changed, searchKey, JSON.stringify(searchParams)]);
       await pool!.query(`UPDATE runs SET status='succeeded', finished_at=NOW() WHERE id=$1`, [run_id]);
       console.log(`[Worker] Run ${run_id} succeeded via provider "${agent.provider}". Changed: ${changed}`);
       if (changed) await sendRunNotification(agent, run_id, 'succeeded', true, resultData);
@@ -242,15 +250,17 @@ async function handleJob(job: any) {
 
     // 7. Check changed flag
     const { rows: lastResults } = await pool!.query(
-      `SELECT data_hash FROM results WHERE agent_id = $1 ORDER BY created_at DESC LIMIT 1`,
-      [agent_id]
+      `SELECT data_hash FROM results WHERE agent_id = $1 AND search_key IS NOT DISTINCT FROM $2
+       ORDER BY created_at DESC LIMIT 1`,
+      [agent_id, searchKey]
     );
     const changed = lastResults.length === 0 || lastResults[0].data_hash !== data_hash;
 
     // 8. Save Result
     await pool!.query(
-      `INSERT INTO results (run_id, agent_id, data, data_hash, changed) VALUES ($1, $2, $3, $4, $5)`,
-      [run_id, agent_id, JSON.stringify(runResult.resultData), data_hash, changed]
+      `INSERT INTO results (run_id, agent_id, data, data_hash, changed, search_key, search_params)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [run_id, agent_id, JSON.stringify(runResult.resultData), data_hash, changed, searchKey, JSON.stringify(searchParams)]
     );
 
     // 9. Self-Healing: bei repariertem Selektor neue Recipe-Version speichern

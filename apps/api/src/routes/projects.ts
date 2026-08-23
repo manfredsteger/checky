@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { CreateProjectSchema, UpdateProjectSchema } from '@checky/shared';
 import { query } from '../db.js';
+import { requeueAfterParamChange } from '../lib/requeue.js';
 import { asyncHandler, IdParamSchema } from '../lib/http.js';
 
 export const projectsRouter = Router();
@@ -52,7 +53,18 @@ projectsRouter.patch('/api/projects/:id', asyncHandler(async (req, res) => {
      WHERE id = $5 RETURNING *`,
     [data.name, data.description, manifestId, params, id]
   );
-  res.json(result.rows[0]);
+
+  // Hat sich die SUCHE geändert (nicht nur eine Anzeige-Schwelle)? Dann sofort
+  // neu messen, damit im Dashboard nicht alte Werte unter neuer Suche stehen.
+  let requeue = { searchChanged: false, requeued: 0, diff: [] as string[] };
+  if ('params' in data) {
+    try {
+      requeue = await requeueAfterParamChange(id, current.rows[0].params || {}, JSON.parse(params));
+    } catch (e) {
+      console.error('[API] Neumessung nach Parameteränderung fehlgeschlagen:', e);
+    }
+  }
+  res.json({ ...result.rows[0], requeue });
 }));
 
 projectsRouter.delete('/api/projects/:id', asyncHandler(async (req, res) => {

@@ -7,6 +7,7 @@ import { Download, ExternalLink } from 'lucide-react';
 import type { EChartsOption } from 'echarts';
 import { resolveDisplay, toNumber } from '../lib/resultDisplay';
 import { ResultView } from '../ui/ResultView';
+import { splitSeries, diffToOlder } from '../lib/series';
 import { EChart } from '../ui/EChart';
 import { SERIES_COLORS, INK, baseGrid, timeAxis, valueAxis, tooltipStyle, thresholdMarkLine, fmtNum } from '../lib/chartTheme';
 
@@ -25,18 +26,27 @@ export default function AgentResults() {
   });
 
   const resolved = resolveDisplay(manifest, { ...(project?.params || {}), ...((agent?.params as any) || {}) });
-  const latest = results?.[0];
+  // Messreihen trennen: nur Werte derselben Suche gehören in eine Kurve.
+  const [showOlder, setShowOlder] = useState(false);
+  const series = splitSeries(results);
+  const shown = showOlder ? results : series.current;
+  const latest = series.current[0];
+  const olderDiff = diffToOlder(series.current[0], series.older[0]);
+  // Ergebnisse von vor der Messreihen-Trennung haben keine gespeicherten
+  // Parameter. Dann jede Abweichung als „Änderung" aufzuzählen wäre falsch —
+  // wir wissen schlicht nicht, womit sie gemessen wurden.
+  const olderUnknown = !series.older[0]?.search_params;
 
   // Alle vorkommenden Felder (stabile Reihenfolge)
-  const fields = Array.from(new Set((results ?? []).flatMap(r => Object.keys(r.data || {})))).filter(f => !f.startsWith('_'));
+  const fields = Array.from(new Set((shown ?? []).flatMap(r => Object.keys(r.data || {})))).filter(f => !f.startsWith('_'));
 
   // Chartbare Felder: mind. ein Wert numerisch parsebar
-  const numericFields = fields.filter(f => (results ?? []).some(r => toNumber(r.data?.[f]) !== null));
+  const numericFields = fields.filter(f => (shown ?? []).some(r => toNumber(r.data?.[f]) !== null));
   const activeChart = chartField || resolved.chartField || numericFields.find(f => /price|preis|amount|value|betrag/i.test(f)) || numericFields[0] || '';
 
   // Zeitreihe [ms, Wert] chronologisch für den ECharts-Zeitachsen-Chart.
   const chartOption = useMemo<EChartsOption>(() => {
-    const data = (results ?? []).slice().reverse()
+    const data = (shown ?? []).slice().reverse()
       .map(r => [new Date(r.created_at).getTime(), toNumber(r.data?.[activeChart])] as [number, number | null])
       .filter(d => d[1] != null);
     const showThresholds = activeChart === (resolved.chartField || resolved.headlineField);
@@ -73,7 +83,7 @@ export default function AgentResults() {
         markLine: showThresholds ? thresholdMarkLine(resolved) : undefined,
       }],
     };
-  }, [results, activeChart, resolved]);
+  }, [shown, activeChart, resolved]);
 
   const download = (kind: 'csv' | 'json') => {
     if (!results || results.length === 0) return;
@@ -122,10 +132,26 @@ export default function AgentResults() {
       </header>
 
       <div className="p-8 space-y-6">
+        {series.older.length > 0 && (
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 flex items-start justify-between gap-4">
+            <div className="text-xs text-amber-200/90 leading-relaxed">
+              <span className="font-bold">Die Suche wurde geändert.</span>{' '}
+              {series.older.length} ältere {series.older.length === 1 ? 'Messwert gehört' : 'Messwerte gehören'} zu einer
+              anderen Suche und {series.older.length === 1 ? 'ist' : 'sind'} nicht vergleichbar
+              {olderUnknown
+                ? <> — sie stammen aus der Zeit vor der Messreihen-Trennung, mit welchen Parametern sie entstanden, ist nicht festgehalten</>
+                : olderDiff.length > 0 && <> — <span className="font-mono text-amber-300">{olderDiff.slice(0, 3).join(', ')}</span></>}.
+            </div>
+            <button onClick={() => setShowOlder(v => !v)}
+              className="shrink-0 text-[11px] font-bold px-2.5 py-1.5 rounded bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 border border-amber-500/30">
+              {showOlder ? 'Nur aktuelle Reihe' : 'Alte Werte einblenden'}
+            </button>
+          </div>
+        )}
         {latest && resolved.headlineField && latest.data?.[resolved.headlineField] != null && (
           <div className="bg-[#111827] border border-[#1f2937] rounded-xl p-5">
             <div className="text-xs uppercase tracking-wider text-[#6b7280] mb-1">Aktuell</div>
-            <ResultView results={results} resolved={resolved} size="lg" />
+            <ResultView results={series.current} resolved={resolved} size="lg" />
             <div className="text-[11px] text-[#6b7280] mt-1">Stand {format(new Date(latest.created_at), 'dd.MM.yy HH:mm')} Uhr</div>
           </div>
         )}
@@ -161,7 +187,7 @@ export default function AgentResults() {
                   </tr>
                 </thead>
                 <tbody>
-                  {results.map(r => (
+                  {(shown ?? []).map(r => (
                     <tr key={r.id} className="border-b border-[#1f2937]/60 hover:bg-[#0f151f]">
                       <td className="p-3 text-[#9ca3af] whitespace-nowrap font-mono text-xs">{format(new Date(r.created_at), 'dd.MM.yy HH:mm')}</td>
                       <td className="p-3">

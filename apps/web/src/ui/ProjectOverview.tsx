@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQueries } from '@tanstack/react-query';
+import { splitSeries } from '../lib/series';
 import { api } from '../api/client';
 import type { Agent, Project, Manifest, Result } from '@checky/shared';
 import type { EChartsOption } from 'echarts';
@@ -58,9 +59,12 @@ export function ProjectOverview({ project, agents, manifest }: {
     })),
   });
   const isLoading = queries.some(q => q.isLoading);
+  // Nur die aktuelle Messreihe je Agent: nach einer Parameteränderung sind
+  // ältere Werte zu einer ANDEREN Suche entstanden. Nebeneinander in einer
+  // Kurve sähe der Wechsel wie ein Preissprung aus.
   const resultsByAgent = useMemo(() => {
     const m: Record<string, Result[]> = {};
-    agents.forEach((a, i) => { m[a.id] = (queries[i].data as Result[] | undefined) ?? []; });
+    agents.forEach((a, i) => { m[a.id] = splitSeries(queries[i].data as Result[] | undefined).current; });
     return m;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agents, queries.map(q => q.dataUpdatedAt).join(',')]);

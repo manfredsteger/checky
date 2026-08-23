@@ -65,6 +65,14 @@
       "max": 9
     },
     {
+      "key": "child_ages",
+      "label": "Alter der Kinder",
+      "type": "text",
+      "default": "",
+      "placeholder": "z.B. 6 oder 6,9",
+      "help": "Kommagetrennt, ein Alter je Kind. Wichtig: Kinderpreise hängen vom Alter ab, und Kayak & Co. übernehmen die Kinder OHNE Altersangabe gar nicht erst. Leer = es wird mit 10 Jahren gerechnet (die teurere Annahme)."
+    },
+    {
       "key": "cabin",
       "label": "Klasse",
       "type": "select",
@@ -174,10 +182,11 @@
   },
   "goal_template": "Flug {{origin}} → {{dest}} ({{outbound}}{% if inbound %} / {{inbound}}{% endif %}), {{adults}} Erwachsene + {{children}} Kinder, {{cabin}}. Günstigsten Gesamtpreis + Airline auslesen.",
   "default_schedule": "0 7 * * *",
-  "version": 3,
+  "version": 4,
   "changelog": [
     "v1: Erststand — origin/dest/dates/pax/cabin/target_price/max_price",
     "v2: origin_code/dest_code für URL-basierte Quellen (Deep-Link-Blueprints)",
-    "v3: dest_out_code/origin_in_code für Gabelflüge (open jaw)"
+    "v3: dest_out_code/origin_in_code für Gabelflüge (open jaw)",
+    "v4: child_ages — Kinderalter, ohne das Kayak & Co. die Kinder ignorieren"
   ]
 }

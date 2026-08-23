@@ -160,6 +160,10 @@ export const ResultSchema = z.object({
   data: z.record(z.string(), z.any()),
   data_hash: z.string(),
   changed: z.boolean(),
+  // Zu welcher Suche gehört dieser Messwert? Ältere Ergebnisse (vor der
+  // Einführung) haben null — die gelten als „unbekannte Messreihe".
+  search_key: z.string().nullable().optional(),
+  search_params: z.record(z.string(), z.any()).nullable().optional(),
   created_at: z.coerce.date(),
 });
 export type Result = z.infer<typeof ResultSchema>;
@@ -299,3 +303,58 @@ export const UpdateSettingsSchema = z.object({
   notify: NotifyConfigSchema.optional(),
 });
 export type UpdateSettings = z.infer<typeof UpdateSettingsSchema>;
+
+// --- Messreihen: Fingerabdruck der Suche ------------------------------------
+// Nicht jeder Parameter beschreibt, WAS gemessen wird. Wunschpreis und
+// Schmerzgrenze sind reine Anzeige-Schwellen, Kategorie/Priorität/Notizen sind
+// Verwaltung. Ändert sich dagegen Route, Datum oder Reisendenzahl, misst der
+// Agent ab da etwas anderes — alte und neue Werte gehören dann in getrennte
+// Messreihen und dürfen nicht in einer Kurve landen.
+
+/** Parameter, die NICHT beeinflussen, was gemessen wird. */
+const NON_SEARCH_PARAMS = new Set([
+  'target_price', 'max_price', 'currency',
+]);
+
+/** Nur die Parameter, die die Suche selbst bestimmen — normalisiert. */
+export function searchParamsOf(params: Record<string, any> | null | undefined): Record<string, any> {
+  const out: Record<string, any> = {};
+  for (const [k, v] of Object.entries(params || {})) {
+    if (k.startsWith('_')) continue;              // _category, _priority, _note, _status
+    if (NON_SEARCH_PARAMS.has(k)) continue;
+    if (v === null || v === undefined || v === '') continue;
+    out[k] = typeof v === 'number' ? v : String(v).trim();
+  }
+  return out;
+}
+
+/**
+ * Stabiler Fingerabdruck der Suche. Gleiche Suche -> gleicher Schlüssel,
+ * unabhängig von der Reihenfolge der Felder.
+ */
+export function searchKeyOf(params: Record<string, any> | null | undefined): string {
+  const search = searchParamsOf(params);
+  const canonical = Object.keys(search).sort().map(k => `${k}=${search[k]}`).join('&');
+  // kleiner, stabiler Hash (FNV-1a) — reicht zum Unterscheiden von Messreihen
+  let h = 0x811c9dc5;
+  for (let i = 0; i < canonical.length; i++) {
+    h ^= canonical.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(16).padStart(8, '0');
+}
+
+/** Was hat sich zwischen zwei Parametersätzen geändert? Für Hinweistexte. */
+export function describeSearchDiff(
+  before: Record<string, any> | null | undefined,
+  after: Record<string, any> | null | undefined,
+): string[] {
+  const a = searchParamsOf(before), b = searchParamsOf(after);
+  const keys = [...new Set([...Object.keys(a), ...Object.keys(b)])].sort();
+  const diff: string[] = [];
+  for (const k of keys) {
+    if (String(a[k] ?? '—') === String(b[k] ?? '—')) continue;
+    diff.push(`${k}: ${a[k] ?? '—'} → ${b[k] ?? '—'}`);
+  }
+  return diff;
+}

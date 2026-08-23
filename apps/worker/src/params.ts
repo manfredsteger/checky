@@ -75,9 +75,22 @@ export function deriveParams(params: Record<string, any>): Record<string, any> {
   p.outbound_de = longDe(p.outbound);
   p.inbound_de = longDe(p.inbound);
 
-  // Pfadsegment der Kayak-Familie (kayak/swoodoo/momondo):
-  // „2adults/2children" bzw. nur „2adults", wenn keine Kinder mitreisen.
-  p.pax_path = [`${adults}adults`, children > 0 ? `${children}children` : '']
+  // Kindesalter: die meisten Quellen preisen altersabhängig (ein 6-Jähriger
+  // zahlt weniger als ein 11-Jähriger). Als Liste angeben, z.B. "6" oder "6,9".
+  const ages = String(p.child_ages ?? '')
+    .split(/[,;\s]+/).map(x => x.trim()).filter(x => /^\d{1,2}$/.test(x)).slice(0, 9);
+  // Fehlt die Altersangabe, aber es reisen Kinder mit: mit 10 rechnen — das ist
+  // die teurere Annahme und meldet lieber zu viel als zu wenig.
+  while (ages.length < children) ages.push('10');
+  ages.length = Math.min(ages.length, children);
+  p.child_age_list = ages.join(',');
+
+  // Pfadsegment der Kayak-Familie (kayak/swoodoo/momondo).
+  // ACHTUNG: „1children" wird dort STILL IGNORIERT — die Seite zeigt dann nur
+  // die Erwachsenen. Verlangt wird die Altersliste: „children-10". Nachgemessen
+  // am 23.08.2026: /2adults/1children -> „2 Reisende", /2adults/children-10 ->
+  // „3 Reisende".
+  p.pax_path = [`${adults}adults`, ages.length ? `children-${ages.join('-')}` : '']
     .filter(Boolean).join('/');
 
   // Rückflug-Segment: leer = Nur-Hinflug (One-Way-URL).

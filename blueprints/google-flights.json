@@ -5,7 +5,7 @@
   "kind": "browser",
   "icon": "plane",
   "description": "Günstigster Flugpreis über Google Flights. Suche per URL-Abfrage — kein Anlernen nötig.",
-  "note": "Google mischt Uhrzeiten und Preise im selben Element; der Preis wird per Regex herausgefiltert. Stopp-/Dauerfilter werden hier NICHT angewandt.",
+  "note": "Reisende lassen sich bei Google NICHT ueber die URL setzen (die Suche steckt sonst im undurchsichtigen tfs-Parameter) — der Klartext \"for 2 adults\" in der Abfrage zerschiesst die Suche sogar komplett (0 Ergebnisse). Deshalb wird die Reisenden-Auswahl bedient: sie startet bei 1 Erwachsenem, die Klickzahlen kommen aus adults_clicks/children_clicks. Ohne das meldet Google Preise fuer EINEN Erwachsenen. Google mischt Uhrzeiten und Preise im selben Element (.YMlIz); der Preis wird per Regex herausgefiltert. Ab 2 Reisenden nennt Google den GESAMTPREIS der Reisegruppe, nicht den Preis pro Person — deshalb divide_by pax_total. Das ergibt den Durchschnitt je Reisendem (Kinder zahlen weniger), genau wie bei idealo.",
   "site": "https://www.google.com/travel/flights",
   "goal_template": "Günstigsten Flugpreis für {{origin}} → {{dest}} ({{outbound}}{% if inbound %} / {{inbound}}{% endif %}) bei Google Flights auslesen.",
   "default_schedule": "0 7 * * *",
@@ -34,8 +34,39 @@
     },
     {
       "action": "wait",
-      "ms": 10000,
+      "ms": 9000,
       "note": "Google rendert die Liste clientseitig"
+    },
+    {
+      "action": "click",
+      "selector": "[aria-label*=\"Anzahl der Passagiere\"]",
+      "note": "Reisende lassen sich NICHT ueber die URL setzen"
+    },
+    {
+      "action": "wait",
+      "ms": 1500
+    },
+    {
+      "action": "click",
+      "selector": "[aria-label=\"Erwachsenen hinzufügen\"]",
+      "repeat": "{{adults_clicks}}",
+      "ms": 400,
+      "note": "startet bei 1 Erwachsenem"
+    },
+    {
+      "action": "click",
+      "selector": "[aria-label^=\"Kind im Alter von\"][aria-label*=\"hinzufügen\"]",
+      "repeat": "{{children_clicks}}",
+      "ms": 400
+    },
+    {
+      "action": "click",
+      "selector": "button:has-text(\"Fertig\")"
+    },
+    {
+      "action": "wait",
+      "ms": 12000,
+      "note": "Preise werden nach der Aenderung neu berechnet"
     },
     {
       "action": "extract",
@@ -45,10 +76,11 @@
         "price": {
           "selector": ".YMlIz",
           "reduce": "min_number",
-          "regex": "(\\d{1,3}(?:\\.\\d{3})*)\\s*€"
+          "regex": "(\\d{1,3}(?:\\.\\d{3})*)\\s*€",
+          "divide_by": "{{pax_total}}"
         }
       }
     }
   ],
-  "version": 1
+  "version": 4
 }

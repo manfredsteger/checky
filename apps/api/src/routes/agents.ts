@@ -3,6 +3,7 @@ import { CreateAgentSchema, UpdateAgentSchema } from '@checky/shared';
 import { query } from '../db.js';
 import { asyncHandler, IdParamSchema, PaginationSchema } from '../lib/http.js';
 import { enqueue } from '../lib/boss.js';
+import { searchKeyOf, describeSearchDiff } from '@checky/shared';
 
 export const agentsRouter = Router();
 
@@ -72,7 +73,29 @@ agentsRouter.patch('/api/agents/:id', asyncHandler(async (req, res) => {
      WHERE id = $11 RETURNING *`,
     [data.name, data.site, data.goal_text, data.params, data.schedule_cron, data.jitter_min, data.enabled, data.notify, data.result_schema, data.provider ?? null, id]
   );
-  res.json(result.rows[0]);
+  const updated = result.rows[0];
+
+  // Wie beim Projekt: nur eine echte Änderung der Suche stößt eine Neumessung
+  // an — Wunschpreis & Co. ändern nur die Darstellung.
+  let requeue = { searchChanged: false, requeued: 0, diff: [] as string[] };
+  if (data.params !== undefined) {
+    const proj = await query('SELECT params FROM projects WHERE id = $1', [updated.project_id]);
+    const pp = proj.rows[0]?.params || {};
+    const before = { ...pp, ...(current.rows[0].params || {}) };
+    const after = { ...pp, ...(updated.params || {}) };
+    if (searchKeyOf(before) !== searchKeyOf(after)) {
+      requeue.searchChanged = true;
+      requeue.diff = describeSearchDiff(before, after);
+      if (updated.enabled) {
+        try {
+          const run = await query(`INSERT INTO runs (agent_id, status) VALUES ($1, 'queued') RETURNING id`, [id]);
+          await enqueue('agent-run', { agent_id: id, run_id: run.rows[0].id, source: 'params-change' });
+          requeue.requeued = 1;
+        } catch (e) { console.error('[API] Neumessung nach Agent-Parameteränderung fehlgeschlagen:', e); }
+      }
+    }
+  }
+  res.json({ ...updated, requeue });
 }));
 
 agentsRouter.delete('/api/agents/:id', asyncHandler(async (req, res) => {

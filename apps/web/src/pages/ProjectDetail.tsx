@@ -8,6 +8,7 @@ import { ProjectParamsEditor } from '../ui/ProjectParamsEditor';
 import { AgentParamsEditor } from '../ui/AgentParamsEditor';
 import { Settings2, LineChart, Loader2, Trash2, ExternalLink } from 'lucide-react';
 import { ProjectOverview } from '../ui/ProjectOverview';
+import { splitSeries } from '../lib/series';
 import { CronExpressionParser } from 'cron-parser';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -45,7 +46,10 @@ function AgentCard({ agent, projectId, resolved, onToggle, onTrigger, onEdit, on
     queryFn: () => api.getAgentResults(agent.id),
     staleTime: 15000,
   });
-  const last = results?.[0];
+  // Nur die aktuelle Messreihe — sonst vergleicht der Trendpfeil über eine
+  // Parameteränderung hinweg und meldet einen Sprung, den es nie gab.
+  const series = splitSeries(results);
+  const last = series.current[0];
   // Manifest-Kennzahl bevorzugt; sonst generische Felder als Fallback.
   const hasHeadline = !!(last && resolved.headlineField && last.data?.[resolved.headlineField] != null);
   const fields = last ? Object.keys(last.data || {}).filter(k => !k.startsWith('_') && k !== resolved.headlineField).slice(0, 3) : [];
@@ -106,7 +110,7 @@ function AgentCard({ agent, projectId, resolved, onToggle, onTrigger, onEdit, on
       <div className="rounded-lg bg-[#0f151f] border border-[#1f2937] px-3 py-2 min-h-[42px]">
         {last ? (
           hasHeadline ? (
-            <ResultView results={results} resolved={resolved} size="sm" />
+            <ResultView results={series.current} resolved={resolved} size="sm" />
           ) : (
             <div className="flex flex-wrap gap-x-3 gap-y-1">
               {fields.map(f => (

@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { useOverlayDismiss } from './useOverlayDismiss';
+import { useToast } from './toast';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
 import type { Project, ManifestParam } from '@checky/shared';
@@ -10,6 +12,7 @@ export function ProjectParamsEditor({ project, onClose }: { project: Project; on
   const [manifestId, setManifestId] = useState<string>(project.manifest_id || '');
   const [values, setValues] = useState<Record<string, any>>({ ...(project.params || {}) });
   const [newKey, setNewKey] = useState('');
+  const toast = useToast();
 
   const manifest = manifestsQ.data?.find(m => m.id === manifestId);
   const set = (k: string, v: any) => setValues(s => ({ ...s, [k]: v }));
@@ -18,12 +21,25 @@ export function ProjectParamsEditor({ project, onClose }: { project: Project; on
 
   const save = useMutation({
     mutationFn: () => api.updateProject(project.id, { manifest_id: manifestId || null, params: values }),
-    onSuccess: () => {
+    onSuccess: (updated: any) => {
       qc.invalidateQueries({ queryKey: ['projects', project.id] });
       qc.invalidateQueries({ queryKey: ['agents', project.id] });
       qc.invalidateQueries({ queryKey: ['projects'] });
+      qc.invalidateQueries({ queryKey: ['activity'] });
+      // Die API meldet zurück, ob sich die SUCHE geändert hat (und nicht bloß
+      // eine Anzeige-Schwelle) und wie viele Läufe deshalb gestartet wurden.
+      const rq = updated?.requeue;
+      if (rq?.searchChanged) {
+        const was = rq.diff?.length ? ` (${rq.diff.slice(0, 2).join(', ')})` : '';
+        toast('success', rq.requeued > 0
+          ? `Suche geändert${was} — ${rq.requeued} ${rq.requeued === 1 ? 'Lauf' : 'Läufe'} neu gestartet. Ältere Werte gehören zur vorherigen Messreihe.`
+          : `Suche geändert${was}. Kein aktiver Agent zum Neumessen.`);
+      } else {
+        toast('success', 'Einstellungen gespeichert.');
+      }
       onClose();
     },
+    onError: (e) => toast('error', (e as Error).message),
   });
 
   const addCustom = () => {
@@ -44,8 +60,10 @@ export function ProjectParamsEditor({ project, onClose }: { project: Project; on
     return <input type="text" value={v ?? ''} onChange={e => set(p.key, e.target.value)} placeholder={p.placeholder} className={input} />;
   };
 
+  const overlay = useOverlayDismiss(onClose);
+
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" {...overlay}>
       <div className="bg-[#111827] border border-[#1f2937] rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-auto p-6 animate-[fadeIn_0.15s_ease-out]" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <div>

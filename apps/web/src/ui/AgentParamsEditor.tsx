@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { useOverlayDismiss } from './useOverlayDismiss';
+import { useToast } from './toast';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
 import type { Agent, Manifest, ManifestParam } from '@checky/shared';
@@ -25,14 +27,27 @@ export function AgentParamsEditor({ agent, manifest, projectParams, onClose }: {
   const customEntries = Object.entries(values).filter(([k]) => !manifestKeys.has(k) && !k.startsWith('_'));
   const category = (values._category as string) || '';
 
+  const toast = useToast();
+
   const save = useMutation({
     mutationFn: () => api.updateAgent(agent.id, { name, params: values }),
-    onSuccess: () => {
+    onSuccess: (updated: any) => {
       qc.invalidateQueries({ queryKey: ['agents', agent.project_id] });
       qc.invalidateQueries({ queryKey: ['agent', agent.id] });
       qc.invalidateQueries({ queryKey: ['agent-last', agent.id] });
+      qc.invalidateQueries({ queryKey: ['activity'] });
+      const rq = updated?.requeue;
+      if (rq?.searchChanged) {
+        const was = rq.diff?.length ? ` (${rq.diff.slice(0, 2).join(', ')})` : '';
+        toast('success', rq.requeued
+          ? `Suche geändert${was} — Lauf neu gestartet. Ältere Werte gehören zur vorherigen Messreihe.`
+          : `Suche geändert${was}. Agent ist pausiert, es wurde nichts gestartet.`);
+      } else {
+        toast('success', 'Gespeichert.');
+      }
       onClose();
     },
+    onError: (e) => toast('error', (e as Error).message),
   });
 
   const addCustom = () => {
@@ -53,8 +68,10 @@ export function AgentParamsEditor({ agent, manifest, projectParams, onClose }: {
     return <input type="text" value={v ?? ''} onChange={e => set(p.key, e.target.value)} placeholder={p.placeholder} className={input} />;
   };
 
+  const overlay = useOverlayDismiss(onClose);
+
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" {...overlay}>
       <div className="bg-[#111827] border border-[#1f2937] rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-auto p-6 animate-[fadeIn_0.15s_ease-out]" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <div>
