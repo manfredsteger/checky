@@ -20,6 +20,9 @@
       },
       "total": {
         "type": "number"
+      },
+      "stops": {
+        "type": "string"
       }
     },
     "required": [
@@ -59,9 +62,14 @@
           "selector": "[data-testid*=\"total\"]",
           "reduce": "min_number",
           "regex": "([\\d.]+,\\d{2})\\s*€"
+        },
+        "stops": {
+          "selector": "[data-testid*=\"offer\"]",
+          "index": 0,
+          "regex": "(Direkt|Nonstop|\\d+\\s*Stopps?)"
         }
       }
     }
   ],
-  "version": 2
+  "version": 3
 }

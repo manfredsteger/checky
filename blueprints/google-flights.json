@@ -17,6 +17,9 @@
     "properties": {
       "price": {
         "type": "number"
+      },
+      "stops": {
+        "type": "string"
       }
     },
     "required": [
@@ -78,9 +81,14 @@
           "reduce": "min_number",
           "regex": "(\\d{1,3}(?:\\.\\d{3})*)\\s*€",
           "divide_by": "{{pax_total}}"
+        },
+        "stops": {
+          "selector": ".pIav2d",
+          "index": 0,
+          "regex": "(Direkt|Nonstop|\\d+\\s*Stopps?)"
         }
       }
     }
   ],
-  "version": 4
+  "version": 5
 }

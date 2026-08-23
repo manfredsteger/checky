@@ -20,6 +20,9 @@
       },
       "duration": {
         "type": "string"
+      },
+      "stops": {
+        "type": "string"
       }
     },
     "required": [
@@ -57,9 +60,14 @@
         "duration": {
           "selector": "button:has-text(\"Günstigster\")",
           "regex": "(\\d+\\s?Std\\.\\s*\\d*)"
+        },
+        "stops": {
+          "selector": "button:has-text(\"Günstigster\")",
+          "index": 0,
+          "regex": "(Direkt|Nonstop|\\d+\\s*Stopps?)"
         }
       }
     }
   ],
-  "version": 1
+  "version": 2
 }

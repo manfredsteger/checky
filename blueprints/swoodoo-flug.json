@@ -68,12 +68,12 @@
           "index": 0
         },
         "stops": {
-          "selector": "[class*=\"JWEO\"]",
+          "selector": "[class*=\"nrc6-content-section\"]",
           "index": 0,
-          "regex": "(Direkt|\\d+\\s*Stopps?)"
+          "regex": "(Direkt|Nonstop|\\d+\\s*Stopps?)"
         }
       }
     }
   ],
-  "version": 1
+  "version": 2
 }

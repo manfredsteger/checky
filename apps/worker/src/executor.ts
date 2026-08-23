@@ -397,6 +397,34 @@ export async function executeRecipe(
       }
     }
 
+    // Wurde der Direktflug-Wunsch überhaupt erfüllt? Die meisten Portale
+    // filtern Zwischenstopps ERST im Browser nach der Suche und ignorieren
+    // entsprechende URL-Parameter stillschweigend. Dann steht auf der Karte ein
+    // günstiger Preis, der in Wahrheit eine Umsteigeverbindung ist — und man
+    // vergleicht Äpfel mit Birnen. Wenn die Quelle ihre Stopp-Angabe mitliefert,
+    // wird das hier geprüft und andernfalls deutlich gemacht.
+    try {
+      const wantDirect = String(agent.params?.max_stops ?? '').trim() === '0';
+      const stops = resultData.stops;
+      if (wantDirect) {
+        const known = stops !== null && stops !== undefined && stops !== '';
+        if (!known) {
+          // Keine Stopp-Angabe = kein Beleg. Die meisten Portale filtern
+          // Zwischenstopps erst im Browser und ignorieren den Wunsch bei der
+          // Suche — ungeprüft stünde hier ein günstiger Umsteigepreis neben
+          // echten Direktflugpreisen.
+          resultData._suspect = 'Gesucht war „nur Direktflug", die Quelle weist die Anzahl der Stopps aber nicht aus. Der Preis ist damit NICHT als Direktflug belegt — die meisten Portale filtern Stopps erst im Browser und suchen ohne diese Einschränkung.';
+        } else {
+          const isDirect = typeof stops === 'number'
+            ? stops === 0
+            : /direkt|nonstop|non-stop|^0\b/i.test(String(stops));
+          if (!isDirect) {
+            resultData._suspect = `Gesucht war „nur Direktflug", die Quelle liefert aber „${stops}". Dieses Portal wendet den Stopp-Filter nicht auf die Suche an — der Preis ist NICHT mit einem Direktflug vergleichbar.`;
+          }
+        }
+      }
+    } catch { /* ohne Prüfung weiter */ }
+
     // Auffällig hohe Werte kennzeichnen. Zwei Ursachen kommen in Frage, und
     // beide will man sehen: entweder hat die Quelle zu den eingestellten Filtern
     // nichts gefunden und zeigt ersatzweise etwas anderes an — oder der Preis

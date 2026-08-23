@@ -20,6 +20,9 @@
       },
       "duration": {
         "type": "string"
+      },
+      "stops": {
+        "type": "string"
       }
     },
     "required": [
@@ -58,9 +61,14 @@
         "duration": {
           "selector": "[data-testid*=\"cheapest\"]",
           "regex": "(\\d+\\s?Std\\.\\s*\\d*'?)"
+        },
+        "stops": {
+          "selector": "[data-testid*=\"cheapest\"]",
+          "index": 0,
+          "regex": "(Direkt|Nonstop|\\d+\\s*Stopps?)"
         }
       }
     }
   ],
-  "version": 1
+  "version": 2
 }
