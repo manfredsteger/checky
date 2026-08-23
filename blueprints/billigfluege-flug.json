@@ -26,7 +26,7 @@
   "recipe": [
     {
       "action": "goto",
-      "url": "https://go.billigfluege.de/compare?is-area-search[]=false&is-area-search[]=false&is-flexible-date[]=false&is-flexible-date[]=false&departure[]={{origin_code}}&departure[]={{dest_code}}&arrival[]={{dest_code}}&arrival[]={{origin_code}}&depart-at[]={{outbound_ts}}&depart-at[]={{inbound_ts}}&adults={{adults}}&children={{children}}&infants=0&itinerary-type=round-trip"
+      "url": "https://go.billigfluege.de/compare?is-area-search[]=false&is-area-search[]=false&is-flexible-date[]={{flexible_yesno}}&is-flexible-date[]={{flexible_yesno}}&departure[]={{origin_code}}&departure[]={{dest_code}}&arrival[]={{dest_code}}&arrival[]={{origin_code}}&depart-at[]={{outbound_ts}}&depart-at[]={{inbound_ts}}&adults={{adults}}&children={{children}}&infants=0&itinerary-type=round-trip"
     },
     {
       "action": "consent",
@@ -55,5 +55,5 @@
       }
     }
   ],
-  "version": 2
+  "version": 3
 }

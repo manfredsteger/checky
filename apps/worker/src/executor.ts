@@ -236,7 +236,13 @@ export async function executeRecipe(
           if (v) raw.push(v);
         }
       } else {
-        const el = loc.nth(spec.index ?? 0);
+        // Erst zählen, dann lesen: textContent() auf einem Element, das es nicht
+        // gibt, WARTET und wirft dann — ein optionales Zusatzfeld (z.B. die
+        // Stopp-Angabe) hätte so die komplette Auslese mitgerissen, obwohl der
+        // Preis längst dastand.
+        const n = await loc.count();
+        if (n === 0) return null;
+        const el = loc.nth(Math.min(spec.index ?? 0, n - 1));
         const v = spec.attr ? await el.getAttribute(spec.attr) : await el.textContent();
         raw = v ? [v] : [];
       }

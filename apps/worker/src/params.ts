@@ -93,8 +93,18 @@ export function deriveParams(params: Record<string, any>): Record<string, any> {
   p.pax_path = [`${adults}adults`, ages.length ? `children-${ages.join('-')}` : '']
     .filter(Boolean).join('/');
 
+  // Datums-Spielraum. Ein einziger Tag Toleranz ändert bei Fernflügen alles:
+  // BER→JFK nonstop kostet am exakten Termin 850 €/P, mit ±1 Tag 620 €.
+  // Kayak & Co. hängen das als Suffix an das Datum im Pfad.
+  const flex = num(p.flex_days);
+  p.date_flex = flex && flex > 0
+    ? (flex === 1 ? '-flexible-1day' : `-flexible-${Math.min(flex, 3)}days`)
+    : '';
+  p.flexible_yesno = flex && flex > 0 ? 'true' : 'false';
+  p.flex_shift = flex && flex > 0 ? String(Math.min(flex, 3)) : '0';
+
   // Rückflug-Segment: leer = Nur-Hinflug (One-Way-URL).
-  p.inbound_seg = p.inbound ? `/${p.inbound}` : '';
+  p.inbound_seg = p.inbound ? `/${p.inbound}${p.date_flex}` : '';
 
   // Filterausdruck der Kayak-Familie: max. Stopps und max. Flugdauer je Strecke.
   // Ohne Dauerbegrenzung gewinnen sonst 30-Stunden-Konstrukte mit Übernacht-

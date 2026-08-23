@@ -26,7 +26,7 @@
   "recipe": [
     {
       "action": "goto",
-      "url": "https://flr.ypsilon.net/?aid=lcc11500&lang=de_DE&conso=lcc24agt&type=openjaw&st=o&flexible_date=0&depapt1={{origin_code}}&dstapt1={{dest_out_code}}&depdate1={{outbound}}&depapt2={{origin_in_code}}&dstapt2={{origin_code}}&depdate2={{inbound}}&adt={{adults}}&chd={{children}}&pax_type=ADT"
+      "url": "https://flr.ypsilon.net/?aid=lcc11500&lang=de_DE&conso=lcc24agt&type=openjaw&st=o&flexible_date={{flex_shift}}&depshift={{flex_shift}}&retshift={{flex_shift}}&depapt1={{origin_code}}&dstapt1={{dest_out_code}}&depdate1={{outbound}}&depapt2={{origin_in_code}}&dstapt2={{origin_code}}&depdate2={{inbound}}&adt={{adults}}&chd={{children}}&pax_type=ADT"
     },
     {
       "action": "consent",
@@ -65,5 +65,5 @@
       }
     }
   ],
-  "version": 3
+  "version": 4
 }

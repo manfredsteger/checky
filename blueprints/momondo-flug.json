@@ -5,7 +5,7 @@
   "kind": "browser",
   "icon": "plane",
   "description": "Günstigster Flugpreis pro Person über Momondo.",
-  "note": "Gleiche URL-Grammatik wie Kayak, aber Pfad /flight-search/.",
+  "note": "Gleiche URL-Grammatik wie Kayak, aber Pfad /flight-search/. Datums-Spielraum über flex_days: Kayak hängt ihn als Suffix an das Datum (-flexible-1day). Wirkung ist erheblich — BER→JFK nonstop 850 €/P am exakten Termin, 620 € mit ±1 Tag.",
   "site": "https://www.momondo.de/",
   "goal_template": "Günstigsten Flugpreis pro Person für {{origin}} → {{dest}} ({{outbound}}{% if inbound %} / {{inbound}}{% endif %}) auslesen.",
   "default_schedule": "0 7 * * *",
@@ -35,7 +35,7 @@
   "recipe": [
     {
       "action": "goto",
-      "url": "https://www.momondo.de/flight-search/{{origin_code}}-{{dest_code}}/{{outbound}}{{inbound_seg}}/{{pax_path}}?sort=price_a&fs={{flight_filter}}"
+      "url": "https://www.momondo.de/flight-search/{{origin_code}}-{{dest_code}}/{{outbound}}{{date_flex}}{{inbound_seg}}/{{pax_path}}?sort=price_a&fs={{flight_filter}}"
     },
     {
       "action": "consent",
@@ -75,5 +75,5 @@
       }
     }
   ],
-  "version": 2
+  "version": 3
 }

@@ -49,6 +49,19 @@
       "help": "leer lassen für Nur-Hinflug"
     },
     {
+      "key": "flex_days",
+      "label": "Datums-Spielraum (± Tage)",
+      "type": "select",
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "default": "0",
+      "help": "Ein Tag Toleranz kann den Preis halbieren: BER→JFK nonstop kostet am exakten Termin 850 €/P, mit ±1 Tag 620 €. Wird von Kayak/SWOODOO/Momondo, fluege.de und Lufthansa City Center unterstützt."
+    },
+    {
       "key": "adults",
       "label": "Erwachsene",
       "type": "number",
@@ -182,12 +195,13 @@
   },
   "goal_template": "Flug {{origin}} → {{dest}} ({{outbound}}{% if inbound %} / {{inbound}}{% endif %}), {{adults}} Erwachsene + {{children}} Kinder, {{cabin}}. Günstigsten Gesamtpreis + Airline auslesen.",
   "default_schedule": "0 7 * * *",
-  "version": 5,
+  "version": 6,
   "changelog": [
     "v1: Erststand — origin/dest/dates/pax/cabin/target_price/max_price",
     "v2: origin_code/dest_code für URL-basierte Quellen (Deep-Link-Blueprints)",
     "v3: dest_out_code/origin_in_code für Gabelflüge (open jaw)",
     "v4: child_ages — Kinderalter, ohne das Kayak & Co. die Kinder ignorieren",
-    "v5: Ortsfelder als Auswahlliste (type airport) statt Freitext — Codes muss man nicht raten"
+    "v5: Ortsfelder als Auswahlliste (type airport) statt Freitext — Codes muss man nicht raten",
+    "v6: flex_days — Datums-Spielraum ±N Tage"
   ]
 }
