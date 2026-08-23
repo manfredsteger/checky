@@ -56,6 +56,12 @@ export function ResultView({ results, resolved, size = 'sm' }: {
             <ArrowIcon dir={trend.dir} />{trend.deltaPct != null ? ` ${trend.deltaPct.toFixed(1)}%` : ''}
           </span>
         )}
+        {(last.data as any)?._ai && (
+          <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-300"
+            title="Der Selektor griff nicht — dieser Wert wurde von der KI aus dem Seitentext geschätzt und kann falsch sein. Recipe prüfen.">
+            geschätzt
+          </span>
+        )}
         {showVerdict && style.label && (
           <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${style.badge}`}>{style.label}</span>
         )}

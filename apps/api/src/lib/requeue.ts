@@ -46,7 +46,10 @@ export async function requeueAfterParamChange(
 
     const run = await query(
       `INSERT INTO runs (agent_id, status) VALUES ($1, 'queued') RETURNING id`, [a.id]);
-    await enqueue('agent-run', { agent_id: a.id, run_id: run.rows[0].id, source: 'params-change' });
+    // Nur EIN Wiederholungsversuch: schlägt ein Lauf fachlich fehl („keine
+    // Flüge für diese Kriterien"), ändert ein zweiter Anlauf nichts — er
+    // blockiert nur minutenlang die Warteschlange der übrigen Agenten.
+    await enqueue('agent-run', { agent_id: a.id, run_id: run.rows[0].id, source: 'params-change' }, { retryLimit: 1 });
     requeued++;
   }
 

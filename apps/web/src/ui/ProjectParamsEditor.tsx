@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useOverlayDismiss } from './useOverlayDismiss';
+import { AirportInput } from './AirportInput';
 import { useToast } from './toast';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
@@ -54,6 +55,7 @@ export function ProjectParamsEditor({ project, onClose }: { project: Project; on
 
   const renderField = (p: ManifestParam) => {
     const v = values[p.key] ?? p.default ?? '';
+    if (p.type === 'airport') return <AirportInput value={v || ''} onChange={code => set(p.key, code)} placeholder={p.placeholder} />;
     if (p.type === 'select') return <select value={v} onChange={e => set(p.key, e.target.value)} className={input}>{(p.options || []).map(o => <option key={o} value={o}>{o}</option>)}</select>;
     if (p.type === 'number') return <input type="number" value={v === null ? '' : v} min={p.min} max={p.max} step={p.step} onChange={e => set(p.key, e.target.value === '' ? null : Number(e.target.value))} placeholder={p.placeholder} className={input} />;
     if (p.type === 'date') return <input type="date" value={v || ''} onChange={e => set(p.key, e.target.value)} className={input} />;

@@ -212,6 +212,12 @@ export async function executeRecipe(
         throw new Error('ai_json Ergebnis passt nicht zum result_schema: ' + parsed.error.issues.map(e => `${e.path.join('.')}: ${e.message}`).join(', '));
       }
       Object.assign(resultData, parsed.data as Record<string, any>);
+      // Deutlich machen, dass dieser Wert GESCHÄTZT ist. Der Notnagel liest den
+      // Seitentext und rät — greift der Selektor nicht mehr, kommt dabei auch
+      // mal eine plausibel aussehende, aber völlig falsche Zahl heraus (einmal
+      // 59 € für einen Langstreckenflug). Ungekennzeichnet wäre das schlimmer
+      // als gar kein Wert.
+      resultData._ai = true;
     };
 
     // Liest ein Feld gemäß Spezifikation aus der Seite.

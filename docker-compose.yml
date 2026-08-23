@@ -1,5 +1,6 @@
 services:
   db:
+    restart: unless-stopped
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: checky
@@ -14,6 +15,7 @@ services:
       retries: 5
 
   api:
+    restart: unless-stopped
     build:
       context: .
       target: api
@@ -33,6 +35,7 @@ services:
         condition: service_healthy
 
   web:
+    restart: unless-stopped
     build:
       context: .
       target: web
@@ -42,6 +45,7 @@ services:
       - PORT_WEB=8081
 
   worker:
+    restart: unless-stopped
     build:
       context: .
       target: worker

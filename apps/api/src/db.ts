@@ -10,6 +10,13 @@ export const pool = process.env.DB_URL ? new Pool({
   connectionString: process.env.DB_URL,
 }) : null;
 
+// Bricht eine Leerlauf-Verbindung weg, feuert der Pool ein 'error'-Event. Ohne
+// Zuhörer beendet node den Prozess — die API wäre still weg. Hier nur
+// protokollieren; der Pool baut die Verbindung von selbst wieder auf.
+pool?.on('error', (err) => {
+  console.error('[API] Datenbank-Verbindung verloren (wird neu aufgebaut):', err.message);
+});
+
 let pglite: PGlite | null = null;
 let pgliteInitPromise: Promise<void> | null = null;
 

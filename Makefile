@@ -10,7 +10,7 @@ FILE ?= backups/checky-$(shell date +%Y%m%d-%H%M%S).sql
 
 .PHONY: help init setup complete up down start stop restart prod dev ps status \
         build rebuild deploy deploy-web publish \
-        migrate db-push seed seed-flights db-shell shell-db db-dump db-restore wait-db \
+        migrate db-push seed seed-flights db-shell shell-db db-dump db-restore wait-db disk \
         reset reset-hard nuke prune clean \
         logs logs-api logs-worker run-once recorder test e2e lint
 
@@ -147,10 +147,18 @@ reset-hard: ## KOMPLETT-Reset: LÖSCHT die DB (Volume), baut & seedet neu — mi
 
 nuke: reset-hard ## Alias für reset-hard (komplettes Zurücksetzen inkl. DB)
 
-prune: ## Docker-Disk sicher freigeben (Build-Cache + dangling Images) — NIE Volumes
+prune: ## Docker-Disk sicher freigeben (Build-Cache + ungenutzte Images) — NIE Volumes
+	@echo "Vorher:"; docker system df | head -5
 	docker builder prune -af
-	docker image prune -f
+	docker image prune -af
+	@echo "Nachher:"; docker system df | head -5
 	@echo "✓ Freigegeben. Volumes unangetastet — DB ist sicher."
+
+disk: ## Belegung der Docker-Disk zeigen — läuft sie voll, stirbt Postgres
+	@docker run --rm -v checky-main_db_data:/v alpine sh -c "df -h /v | tail -2" 2>/dev/null || true
+	@docker system df
+	@echo "Bei >85% Belegung: 'make prune' ausführen. Postgres kann sonst nicht"
+	@echo "einmal mehr seine Lock-Datei schreiben und startet in einer Schleife neu."
 
 clean: ## Lokale Build-Artefakte + node_modules entfernen
 	rm -rf node_modules apps/*/node_modules packages/*/node_modules dist apps/*/dist

@@ -17,6 +17,13 @@ let boss: PgBoss | null = null;
 
 if (dbUrl) {
   pool = new pg.Pool({ connectionString: dbUrl });
+  // Ohne diesen Handler beendet eine abgebrochene LEERLAUF-Verbindung den
+  // ganzen Prozess: node wirft bei einem 'error'-Event ohne Zuhörer. Genau so
+  // ist der Worker still gestorben — und alle Läufe standen auf „wartet auf
+  // Worker", ohne dass jemand sie abgearbeitet hätte.
+  pool.on('error', (err: Error) => {
+    console.error('[Worker] Datenbank-Verbindung verloren (wird neu aufgebaut):', err.message);
+  });
   boss = new PgBoss(dbUrl);
   boss.on('error', (error: any) => console.error('[pg-boss error]', error));
 }
@@ -36,9 +43,15 @@ async function start() {
   // Agenten NICHT bis zum nächsten 60s-Scheduler-Poll auf ihre eigene Queue
   // warten müssen. Cron läuft weiterhin über die per-Agent-Queues.
   await boss.createQueue('agent-run').catch(() => {});
-  await boss.work('agent-run', { batchSize: 1 }, async (jobs: any[]) => {
-    for (const job of jobs) await handleJob(job);
+  // Mehrere Läufe gleichzeitig. Ein Browser-Lauf dauert 30-90 s; wird nach einer
+  // Parameteränderung ein ganzes Projekt neu vermessen, stehen sonst alle
+  // Agenten minutenlang auf „wartet auf Worker". Der Deckel bleibt niedrig,
+  // weil jeder Lauf ein eigenes Chromium startet (Arbeitsspeicher!).
+  const CONCURRENCY = Math.max(1, Math.min(Number(process.env.RUN_CONCURRENCY ?? 3), 6));
+  await boss.work('agent-run', { batchSize: CONCURRENCY }, async (jobs: any[]) => {
+    await Promise.allSettled(jobs.map(job => handleJob(job)));
   });
+  console.log(`[Worker] Bis zu ${CONCURRENCY} Läufe gleichzeitig`);
 
   // Recorder-Queue: Anlern-Sessions (langlaufend, bis 5 min)
   await boss.createQueue('recorder').catch(() => {});

@@ -40,6 +40,8 @@ export const api = {
   updateAgent: (id: string, data: UpdateAgent) => fetcher<Agent>(`/agents/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteAgent: (id: string) => fetcher<Agent>(`/agents/${id}`, { method: 'DELETE' }),
   
+  searchPlaces: (q: string) => fetcher<Array<{code:string;name:string;kind:'city'|'airport';country:string;label:string}>>(`/places?q=${encodeURIComponent(q)}`),
+
   getAgentRuns: (id: string) => fetcher<Run[]>(`/agents/${id}/runs`),
   getAgentResults: (id: string) => fetcher<Result[]>(`/agents/${id}/results`),
   triggerAgentRun: (id: string) => fetcher<Run>(`/agents/${id}/trigger`, { method: 'POST' }),

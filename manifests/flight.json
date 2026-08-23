@@ -22,18 +22,18 @@
     {
       "key": "dest_code",
       "label": "Ziel-Code (IATA)",
-      "type": "text",
+      "type": "airport",
       "default": "",
       "placeholder": "z.B. TYO",
-      "help": "Stadtcode erlaubt (TYO = alle Tokioter Flughäfen). Leer = Zielflughafen wird verwendet."
+      "help": "Aus der Liste wählen. Achtung: Osaka als Stadt ist OSA, Kansai allein ist KIX."
     },
     {
       "key": "origin_code",
       "label": "Abflug-Code (IATA)",
-      "type": "text",
+      "type": "airport",
       "default": "",
       "placeholder": "z.B. MUC",
-      "help": "Nur für URL-basierte Quellen (Kayak/Momondo/SWOODOO/Google). Leer = Abflughafen wird verwendet, sofern er schon ein 3-Buchstaben-Code ist."
+      "help": "Aus der Liste wählen — der Code landet unverändert in den Such-URLs. Stadt („alle Flughäfen\") ist beim Preisvergleich meist besser als ein einzelner Flughafen."
     },
     {
       "key": "outbound",
@@ -120,7 +120,7 @@
     {
       "key": "dest_out_code",
       "label": "Ziel Hinflug (IATA)",
-      "type": "text",
+      "type": "airport",
       "default": "",
       "placeholder": "z.B. KIX",
       "help": "Nur für Gabelflüge: Ankunft des Hinflugs, wenn sie vom Rückflug-Abflug abweicht. Leer = normaler Hin-/Rückflug."
@@ -128,7 +128,7 @@
     {
       "key": "origin_in_code",
       "label": "Abflug Rückflug (IATA)",
-      "type": "text",
+      "type": "airport",
       "default": "",
       "placeholder": "z.B. TYO",
       "help": "Nur für Gabelflüge: von wo der Rückflug startet. Leer = wie Ziel Hinflug."
@@ -182,11 +182,12 @@
   },
   "goal_template": "Flug {{origin}} → {{dest}} ({{outbound}}{% if inbound %} / {{inbound}}{% endif %}), {{adults}} Erwachsene + {{children}} Kinder, {{cabin}}. Günstigsten Gesamtpreis + Airline auslesen.",
   "default_schedule": "0 7 * * *",
-  "version": 4,
+  "version": 5,
   "changelog": [
     "v1: Erststand — origin/dest/dates/pax/cabin/target_price/max_price",
     "v2: origin_code/dest_code für URL-basierte Quellen (Deep-Link-Blueprints)",
     "v3: dest_out_code/origin_in_code für Gabelflüge (open jaw)",
-    "v4: child_ages — Kinderalter, ohne das Kayak & Co. die Kinder ignorieren"
+    "v4: child_ages — Kinderalter, ohne das Kayak & Co. die Kinder ignorieren",
+    "v5: Ortsfelder als Auswahlliste (type airport) statt Freitext — Codes muss man nicht raten"
   ]
 }
