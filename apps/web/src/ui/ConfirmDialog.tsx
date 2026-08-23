@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { useOverlayDismiss } from './useOverlayDismiss';
 
 export interface ConfirmDialogProps {
   open: boolean;
@@ -28,10 +29,12 @@ export function ConfirmDialog({
 
   if (!open) return null;
 
+  const overlay = useOverlayDismiss(onCancel);
+
   return (
     <div
       className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-      onClick={onCancel}
+      {...overlay}
     >
       <div
         className="bg-[#111827] border border-[#1f2937] rounded-2xl shadow-2xl w-full max-w-md p-6 animate-[fadeIn_0.15s_ease-out]"
