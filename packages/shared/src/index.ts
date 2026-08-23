@@ -189,7 +189,19 @@ export const CreateAgentSchema = AgentSchema.omit({
 });
 export type CreateAgent = z.infer<typeof CreateAgentSchema>;
 
-export const UpdateAgentSchema = CreateAgentSchema.partial();
+// ACHTUNG: .partial() macht Felder optional, hebt aber .default() NICHT auf.
+// Ein Teil-Update wie { name: "…" } bekäme dadurch params: {} untergeschoben
+// und würde beim UPDATE die vorhandenen Parameter LÖSCHEN — genau so sind beim
+// blossen Umbenennen von zwölf Agenten deren params und result_schema
+// verschwunden. Alle Felder mit Default deshalb ausdrücklich ohne Default neu
+// deklarieren, damit „nicht mitgeschickt" auch wirklich „nicht anfassen" heisst.
+export const UpdateAgentSchema = CreateAgentSchema.partial().extend({
+  params: z.record(z.string(), z.any()).nullable().optional(),
+  notify: z.record(z.string(), z.any()).nullable().optional(),
+  result_schema: z.record(z.string(), z.any()).nullable().optional(),
+  jitter_min: z.number().int().optional(),
+  enabled: z.boolean().optional(),
+});
 export type UpdateAgent = z.infer<typeof UpdateAgentSchema>;
 
 // Helper to translate JSON Schema to Zod Schema
