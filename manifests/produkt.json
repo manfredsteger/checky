@@ -1,0 +1,35 @@
+{
+  "id": "produkt",
+  "name": "Produktpreis",
+  "icon": "shopping-cart",
+  "description": "Preis eines Online-Produkts (Amazon & Co.) über die Zeit beobachten.",
+  "params": [
+    { "key": "target_price", "label": "Wunschpreis (€)", "type": "number", "default": null, "help": "Bei diesem Preis oder darunter hervorheben" },
+    { "key": "max_price", "label": "Referenzpreis (€)", "type": "number", "default": null, "help": "Oberhalb als teuer markieren, z.B. der Preis beim Anlegen" }
+  ],
+  "result_schema": {
+    "type": "object",
+    "properties": {
+      "price": { "type": "string" },
+      "title": { "type": "string" },
+      "availability": { "type": "string" }
+    },
+    "required": ["price"]
+  },
+  "display": {
+    "headline": "price",
+    "chart_field": "price",
+    "target_param": "target_price",
+    "max_param": "max_price",
+    "unit": "€",
+    "trend_good": "down",
+    "secondary": [
+      { "field": "title" },
+      { "field": "availability", "label": "Verfügbarkeit" }
+    ]
+  },
+  "goal_template": "Aktuellen Preis, Produkttitel und Verfügbarkeit dieses Angebots auslesen.",
+  "default_schedule": "0 8 * * *",
+  "version": 1,
+  "changelog": ["v1: Erststand — target_price/max_price, price/title/in_stock"]
+}
