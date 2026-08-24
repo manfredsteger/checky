@@ -154,6 +154,56 @@ async function checkGuardrails(locator: Locator, action: string) {
   }
 }
 
+// Prüft ein Ergebnis auf Plausibilität und markiert es ggf. mit `_suspect`
+// (Hinweis, kein Urteil — der Wert bleibt stehen, wird aber nicht als sicher
+// verkauft). Gilt für JEDE Ausführungsart (Browser-Recipe UND API-Provider
+// wie Kiwi) — beide rufen dieselbe Funktion auf, damit ein Provider-Ergebnis
+// nicht an dieser Prüfung vorbeirutscht, nur weil es keinen Playwright-Lauf
+// durchläuft.
+export function applyPlausibilityChecks(resultData: Record<string, any>, params: Record<string, any> | null | undefined) {
+  // Wurde der Direktflug-Wunsch überhaupt erfüllt? Die meisten Portale
+  // filtern Zwischenstopps ERST im Browser nach der Suche und ignorieren
+  // entsprechende URL-Parameter stillschweigend. Dann steht auf der Karte ein
+  // günstiger Preis, der in Wahrheit eine Umsteigeverbindung ist — und man
+  // vergleicht Äpfel mit Birnen. Wenn die Quelle ihre Stopp-Angabe mitliefert,
+  // wird das hier geprüft und andernfalls deutlich gemacht.
+  try {
+    const wantDirect = String(params?.max_stops ?? '').trim() === '0';
+    const stops = resultData.stops;
+    if (wantDirect) {
+      const known = stops !== null && stops !== undefined && stops !== '';
+      if (!known) {
+        // Keine Stopp-Angabe = kein Beleg. Die meisten Portale filtern
+        // Zwischenstopps erst im Browser und ignorieren den Wunsch bei der
+        // Suche — ungeprüft stünde hier ein günstiger Umsteigepreis neben
+        // echten Direktflugpreisen.
+        resultData._suspect = 'Gesucht war „nur Direktflug", die Quelle weist die Anzahl der Stopps aber nicht aus. Der Preis ist damit NICHT als Direktflug belegt — die meisten Portale filtern Stopps erst im Browser und suchen ohne diese Einschränkung.';
+      } else {
+        const isDirect = typeof stops === 'number'
+          ? stops === 0
+          : /direkt|nonstop|non-stop|^0\b/i.test(String(stops));
+        if (!isDirect) {
+          resultData._suspect = `Gesucht war „nur Direktflug", die Quelle liefert aber „${stops}". Dieses Portal wendet den Stopp-Filter nicht auf die Suche an — der Preis ist NICHT mit einem Direktflug vergleichbar.`;
+        }
+      }
+    }
+  } catch { /* ohne Prüfung weiter */ }
+
+  // Auffällig hohe Werte kennzeichnen. Zwei Ursachen kommen in Frage, und
+  // beide will man sehen: entweder hat die Quelle zu den eingestellten Filtern
+  // nichts gefunden und zeigt ersatzweise etwas anderes an — oder der Preis
+  // ist echt, aber die Filter lassen nur teure Angebote übrig (nach New York
+  // gibt es nonstop nur Premium Economy für 1200 € statt 480 € mit einem Stopp).
+  // Deshalb nur markieren und erklären, nicht verwerfen.
+  try {
+    const limit = Number(params?.max_price);
+    const head = Number(resultData.price);
+    if (Number.isFinite(limit) && limit > 0 && Number.isFinite(head) && head > limit * 3) {
+      resultData._suspect = `Weit über der Schmerzgrenze (${limit} €). Entweder lassen die Filter nur teure Angebote übrig (z.B. „nur Direktflug" auf einer Strecke, die nonstop nur in höherer Klasse angeboten wird), oder die Quelle hat nichts Passendes gefunden und zeigt ersatzweise etwas anderes. Bitte über „Zum Angebot" nachsehen.`;
+    }
+  } catch { /* ohne Prüfung weiter */ }
+}
+
 export async function executeRecipe(
   agent: { site: string, params: Record<string, any>, result_schema?: any },
   recipe: Recipe,
@@ -403,47 +453,7 @@ export async function executeRecipe(
       }
     }
 
-    // Wurde der Direktflug-Wunsch überhaupt erfüllt? Die meisten Portale
-    // filtern Zwischenstopps ERST im Browser nach der Suche und ignorieren
-    // entsprechende URL-Parameter stillschweigend. Dann steht auf der Karte ein
-    // günstiger Preis, der in Wahrheit eine Umsteigeverbindung ist — und man
-    // vergleicht Äpfel mit Birnen. Wenn die Quelle ihre Stopp-Angabe mitliefert,
-    // wird das hier geprüft und andernfalls deutlich gemacht.
-    try {
-      const wantDirect = String(agent.params?.max_stops ?? '').trim() === '0';
-      const stops = resultData.stops;
-      if (wantDirect) {
-        const known = stops !== null && stops !== undefined && stops !== '';
-        if (!known) {
-          // Keine Stopp-Angabe = kein Beleg. Die meisten Portale filtern
-          // Zwischenstopps erst im Browser und ignorieren den Wunsch bei der
-          // Suche — ungeprüft stünde hier ein günstiger Umsteigepreis neben
-          // echten Direktflugpreisen.
-          resultData._suspect = 'Gesucht war „nur Direktflug", die Quelle weist die Anzahl der Stopps aber nicht aus. Der Preis ist damit NICHT als Direktflug belegt — die meisten Portale filtern Stopps erst im Browser und suchen ohne diese Einschränkung.';
-        } else {
-          const isDirect = typeof stops === 'number'
-            ? stops === 0
-            : /direkt|nonstop|non-stop|^0\b/i.test(String(stops));
-          if (!isDirect) {
-            resultData._suspect = `Gesucht war „nur Direktflug", die Quelle liefert aber „${stops}". Dieses Portal wendet den Stopp-Filter nicht auf die Suche an — der Preis ist NICHT mit einem Direktflug vergleichbar.`;
-          }
-        }
-      }
-    } catch { /* ohne Prüfung weiter */ }
-
-    // Auffällig hohe Werte kennzeichnen. Zwei Ursachen kommen in Frage, und
-    // beide will man sehen: entweder hat die Quelle zu den eingestellten Filtern
-    // nichts gefunden und zeigt ersatzweise etwas anderes an — oder der Preis
-    // ist echt, aber die Filter lassen nur teure Angebote übrig (nach New York
-    // gibt es nonstop nur Premium Economy für 1200 € statt 480 € mit einem Stopp).
-    // Deshalb nur markieren und erklären, nicht verwerfen.
-    try {
-      const limit = Number(agent.params?.max_price);
-      const head = Number(resultData.price);
-      if (Number.isFinite(limit) && limit > 0 && Number.isFinite(head) && head > limit * 3) {
-        resultData._suspect = `Weit über der Schmerzgrenze (${limit} €). Entweder lassen die Filter nur teure Angebote übrig (z.B. „nur Direktflug" auf einer Strecke, die nonstop nur in höherer Klasse angeboten wird), oder die Quelle hat nichts Passendes gefunden und zeigt ersatzweise etwas anderes. Bitte über „Zum Angebot" nachsehen.`;
-      }
-    } catch { /* ohne Prüfung weiter */ }
+    applyPlausibilityChecks(resultData, agent.params);
 
     // Live-Link merken: die Seite, auf der die Werte tatsächlich standen — bei
     // Deep-Link-Quellen die fertig ausgefüllte Ergebnisliste. Damit kann das

@@ -32,7 +32,13 @@ export function ResultView({ results, resolved, size = 'sm' }: {
   const { raw, num } = headlineValue(last.data, resolved);
   if (raw == null || raw === '') return null;
 
-  const verdict = verdictFor(num, resolved);
+  // Ein „prüfen"-Ergebnis (z.B. unbelegter Direktflug) darf nicht gleichzeitig
+  // als „Wunschpreis erreicht" gefeiert werden — das wäre ein Widerspruch auf
+  // derselben Karte. „über Schmerzgrenze" bleibt davon unberührt: ein zu hoher
+  // Preis ist auch unter Vorbehalt noch ein zu hoher Preis.
+  const suspect = !!(last.data as any)?._suspect;
+  const rawVerdict = verdictFor(num, resolved);
+  const verdict = suspect && rawVerdict === 'good' ? 'ok' : rawVerdict;
   const style = VERDICT_STYLE[verdict];
   const showVerdict = verdict === 'good' || verdict === 'high';
 

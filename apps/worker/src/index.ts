@@ -1,7 +1,7 @@
 import { PgBoss } from 'pg-boss';
 import pg from 'pg';
 import crypto from 'crypto';
-import { executeRecipe } from './executor.js';
+import { executeRecipe, applyPlausibilityChecks } from './executor.js';
 import { ClaudeAgentProvider } from './aiProvider.js';
 import { runRecorderSession, runAssistedRecorderSession } from './recorder.js';
 import { deriveParams } from './params.js';
@@ -237,6 +237,11 @@ async function handleJob(job: any) {
     // 4b. API-Quelle (kind:api): Provider-Adapter statt Recipe/Browser.
     if (agent.provider) {
       const resultData = await fetchProvider(agent.provider, agent.params || {});
+      // Dieselbe Plausibilitätsprüfung wie bei Browser-Recipes — ein
+      // Provider-Ergebnis (z.B. Kiwi) ist sonst von der Direktflug-/
+      // Schmerzgrenze-Prüfung ausgenommen, nur weil es keinen Playwright-Lauf
+      // durchläuft.
+      applyPlausibilityChecks(resultData, agent.params);
       const canonicalStr = JSON.stringify(resultData, Object.keys(resultData).sort());
       const data_hash = crypto.createHash('sha256').update(canonicalStr).digest('hex');
       const { rows: last } = await pool!.query(

@@ -143,9 +143,18 @@ export async function fetchKiwi(params: Record<string, any>): Promise<Record<str
     return { it, out, inb, total: Number(it.price.amount) };
   }).sort((a, b) => a.total - b.total);
 
-  const pick = withInfo.find(x =>
-    maxDurH == null || (x.out.durationH <= maxDurH && (!x.inb || x.inb.durationH <= maxDurH))
-  );
+  const durOk = (x: typeof withInfo[number]) =>
+    maxDurH == null || (x.out.durationH <= maxDurH && (!x.inb || x.inb.durationH <= maxDurH));
+  // `filter: { maxStopsCount }` ist ein Wunsch an die API, keine Garantie —
+  // schon einmal ist trotz maxStopsCount:0 eine 1-Stopp-Verbindung
+  // durchgerutscht. Deshalb hier zusätzlich clientseitig gegenprüfen: zuerst
+  // eine wirklich stopp-konforme Verbindung suchen, erst wenn es keine gibt,
+  // auf die günstigste Verbindung unabhängig von den Stopps zurückfallen
+  // (die dann von applyPlausibilityChecks() als `_suspect` markiert wird,
+  // statt unbemerkt als "Direkt" durchzugehen).
+  const stopsOk = (x: typeof withInfo[number]) =>
+    x.out.stops <= maxStops && (!x.inb || x.inb.stops <= maxStops);
+  const pick = withInfo.find(x => durOk(x) && stopsOk(x)) ?? withInfo.find(durOk);
   if (!pick) throw new Error(`Kiwi: kein Flug ≤ ${maxDurH}h Reisezeit gefunden`);
 
   const airlines = Array.from(new Set([...pick.out.carriers, ...(pick.inb?.carriers || [])])).join(', ');

@@ -32,7 +32,7 @@ interface AgentSeries {
 }
 
 type Stats = NonNullable<ReturnType<typeof statsOf>>;
-interface AgentStatsRow { agent: Agent; color: string; stats: Stats; lastAt: Date; }
+interface AgentStatsRow { agent: Agent; color: string; stats: Stats; lastAt: Date; latestSuspect: boolean; }
 
 function statsOf(nums: number[]) {
   if (!nums.length) return null;
@@ -105,12 +105,17 @@ export function ProjectOverview({ project, agents, manifest }: {
   const perAgentStats = useMemo(() => {
     return agents.map((a, i) => {
       const rs = resultsByAgent[a.id] ?? [];
-      const nums = rs
-        .filter(r => !cutoff || new Date(r.created_at).getTime() >= cutoff)
-        .map(r => toNumber(r.data?.[field]))
-        .filter((n): n is number => n != null);
+      const inRange = rs.filter(r => !cutoff || new Date(r.created_at).getTime() >= cutoff);
+      const withNum = inRange
+        .map(r => ({ r, n: toNumber(r.data?.[field]) }))
+        .filter((x): x is { r: Result; n: number } => x.n != null);
+      const nums = withNum.map(x => x.n);
       const lastAt = rs[0]?.created_at;
-      return { agent: a, color: seriesColor(i), stats: statsOf(nums), lastAt };
+      // Ist die aktuellste Kennzahl selbst als `_suspect` markiert (z.B. ein
+      // unbelegter Direktflug)? Fließt in Verdict-Farbe und „Bester"-Kür ein —
+      // ein nicht belegter Preis soll weder grün leuchten noch gewinnen.
+      const latestSuspect = !!(withNum[0]?.r.data as any)?._suspect;
+      return { agent: a, color: seriesColor(i), stats: statsOf(nums), lastAt, latestSuspect };
     }).filter((x): x is AgentStatsRow => x.stats != null);
   }, [agents, resultsByAgent, field, cutoff]);
 
@@ -257,8 +262,13 @@ function StatsTable({ rows, resolved }: {
   resolved: ReturnType<typeof resolveDisplay>;
 }) {
   const u = resolved.unit ? ` ${resolved.unit}` : '';
-  // Beste (günstigste bei trend_good=down) Kennzahl hervorheben.
-  const best = rows.reduce<null | { id: string; v: number }>((acc, r) => {
+  // Beste (günstigste bei trend_good=down) Kennzahl hervorheben — aber nur
+  // unter belegten Werten: ein `_suspect`-Preis (z.B. ein als „Direkt"
+  // gesuchter, tatsächlich aber unbelegter Umsteigepreis) soll nicht als
+  // „Bester" gewinnen, nur weil er zufällig niedrig ist. Erst wenn ALLE Werte
+  // unbelegt sind, zählt notgedrungen der niedrigste davon.
+  const bestCandidates = rows.some(r => !r.latestSuspect) ? rows.filter(r => !r.latestSuspect) : rows;
+  const best = bestCandidates.reduce<null | { id: string; v: number }>((acc, r) => {
     const v = r.stats.latest;
     if (acc == null) return { id: r.agent.id, v };
     return (resolved.trendGood === 'down' ? v < acc.v : v > acc.v) ? { id: r.agent.id, v } : acc;
@@ -280,8 +290,10 @@ function StatsTable({ rows, resolved }: {
           </tr>
         </thead>
         <tbody>
-          {rows.map(({ agent, color, stats, lastAt }) => {
-            const v = verdictFor(stats.latest, resolved);
+          {rows.map(({ agent, color, stats, lastAt, latestSuspect }) => {
+            // Wie in ResultView: „Wunschpreis erreicht" nicht auf einem unbelegten Preis feiern.
+            const rawVerdict = verdictFor(stats.latest, resolved);
+            const v = latestSuspect && rawVerdict === 'good' ? 'ok' : rawVerdict;
             const isBest = best?.id === agent.id;
             return (
               <tr key={agent.id} className="border-b border-[#1f2937]/60 hover:bg-[#0f151f]">
@@ -290,6 +302,7 @@ function StatsTable({ rows, resolved }: {
                     <span className="inline-block w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: color }} />
                     <span className="text-white">{agent.name}</span>
                     {isBest && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/15 text-emerald-300 uppercase tracking-wider">Bester</span>}
+                    {latestSuspect && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-500/15 text-red-300 uppercase tracking-wider" title="Aktuellster Wert ist nicht belegt (z.B. Direktflug-Wunsch, den die Quelle nicht ausweist)">prüfen</span>}
                   </span>
                 </td>
                 <td className={`py-2 px-3 text-right font-bold tabular-nums ${VERDICT_STYLE[v].text}`}>{fmtNum(stats.latest)}</td>
