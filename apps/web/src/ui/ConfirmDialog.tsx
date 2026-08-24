@@ -27,9 +27,9 @@ export function ConfirmDialog({
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onConfirm, onCancel]);
 
-  if (!open) return null;
-
   const overlay = useOverlayDismiss(onCancel);
+
+  if (!open) return null;
 
   return (
     <div

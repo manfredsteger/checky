@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { useToast } from '../ui/toast';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -179,12 +179,14 @@ export default function ProjectDetail() {
   const { projectId } = useParams();
   const queryClient = useQueryClient();
   const toast = useToast();
+  const navigate = useNavigate();
   const [confirmRunAll, setConfirmRunAll] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [overviewOpen, setOverviewOpen] = useState(false);
   const [catFilter, setCatFilter] = useState<string | null>(null);
   const [editAgent, setEditAgent] = useState<Agent | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Agent | null>(null);
+  const [confirmDeleteProject, setConfirmDeleteProject] = useState(false);
 
   const projectActivity = useProjectActivity(projectId!);
 
@@ -215,6 +217,19 @@ export default function ProjectDetail() {
       setDeleteTarget(null);
       queryClient.invalidateQueries({ queryKey: ['agents', projectId] });
       queryClient.invalidateQueries({ queryKey: ['projects'] });
+    },
+    onError: (e) => toast('error', (e as Error).message),
+  });
+
+  // Ganzes Projekt entfernen. Alle Agenten hängen per ON DELETE CASCADE daran
+  // (und an denen wiederum Läufe/Ergebnisse/Recipes) — deshalb eigene, deutlich
+  // schärfere Rückfrage als beim einzelnen Agenten.
+  const deleteProjectMutation = useMutation({
+    mutationFn: () => api.deleteProject(projectId!),
+    onSuccess: () => {
+      toast('success', `„${project?.name ?? 'Projekt'}" gelöscht.`);
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      navigate('/');
     },
     onError: (e) => toast('error', (e as Error).message),
   });
@@ -305,6 +320,10 @@ export default function ProjectDetail() {
             Alle ausführen
           </button>
           <Link to={`/projects/${projectId}/agents/new`} className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-2 px-4 rounded transition-colors">+ Neuer Agent</Link>
+          <button onClick={() => setConfirmDeleteProject(true)} title="Projekt löschen"
+            className="text-[#6b7280] hover:text-red-400 bg-[#1f2937] hover:bg-red-500/15 p-2 rounded transition-colors">
+            <Trash2 className="w-4 h-4" />
+          </button>
         </div>
       </header>
 
@@ -369,6 +388,17 @@ export default function ProjectDetail() {
         loading={runAll.isPending}
         onCancel={() => setConfirmRunAll(false)}
         onConfirm={() => { setConfirmRunAll(false); runAll.mutate(); }}
+      />
+
+      <ConfirmDialog
+        open={confirmDeleteProject}
+        title={`„${project.name}" komplett löschen?`}
+        message={`Alle ${agents?.length ?? 0} Agenten dieses Projekts werden mit allen Läufen, Ergebnissen und angelernten Recipes entfernt. Das lässt sich nicht rückgängig machen.`}
+        confirmLabel="Projekt endgültig löschen"
+        danger
+        loading={deleteProjectMutation.isPending}
+        onConfirm={() => deleteProjectMutation.mutate()}
+        onCancel={() => setConfirmDeleteProject(false)}
       />
 
       {settingsOpen && <ProjectParamsEditor project={project} onClose={() => setSettingsOpen(false)} />}
