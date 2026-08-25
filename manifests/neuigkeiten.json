@@ -10,7 +10,7 @@
       "type": "select",
       "options": ["Deutsch (Dub oder Sub)", "Nur deutscher Dub", "Nur Dub, absolut keine Untertitel nötig", "Nur deutsche Untertitel", "Alle Sprachen"],
       "default": "Deutsch (Dub oder Sub)",
-      "help": "„Nur Dub, absolut keine Untertitel nötig" ist am strengsten: schließt Titel aus, bei denen irgendeine Episode nur mit Untertiteln läuft — auch wenn andere Episoden schon Dub haben."
+      "help": "„Nur Dub, absolut keine Untertitel nötig\" ist am strengsten: schließt Titel aus, bei denen irgendeine Episode nur mit Untertiteln läuft — auch wenn andere Episoden schon Dub haben."
     },
     {
       "key": "limit",
@@ -48,7 +48,7 @@
   "version": 4,
   "changelog": [
     "v1: Erststand — sprache/limit, count/items/newest_title/newest_url",
-    "v2: Sprachfilter „Nur Dub, absolut keine Untertitel nötig" — strenger als „Nur deutscher Dub", schließt auch Titel mit gemischten Dub/Sub-Episoden aus",
+    "v2: Sprachfilter „Nur Dub, absolut keine Untertitel nötig\" — strenger als „Nur deutscher Dub\", schließt auch Titel mit gemischten Dub/Sub-Episoden aus",
     "v3: limit-Obergrenze auf 20 korrigiert — AniWorlds /neu-Seite listet nachweislich nie mehr, egal welcher Wert eingestellt wird (keine Pagination)",
     "v4: available_total ergänzt — AniWorld-Blueprint wechselt von /neu (20, Titel ohne Sprachangabe) auf /neue-episoden (150+ Episoden-Releases inkl. Sprache pro Zeile in einem Abruf)"
   ]

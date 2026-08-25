@@ -3,7 +3,7 @@ import { api } from '../api/client';
 import { useParams, Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import { useMemo, useState } from 'react';
-import { Download, ExternalLink } from 'lucide-react';
+import { Download, ExternalLink, ChevronDown, ChevronRight } from 'lucide-react';
 import type { EChartsOption } from 'echarts';
 import { resolveDisplay, toNumber } from '../lib/resultDisplay';
 import { ResultView } from '../ui/ResultView';
@@ -12,32 +12,83 @@ import { EChart } from '../ui/EChart';
 import { SERIES_COLORS, INK, baseGrid, timeAxis, valueAxis, tooltipStyle, thresholdMarkLine, fmtNum } from '../lib/chartTheme';
 
 // Manche Manifeste liefern kein einzelnes Skalar, sondern eine Liste (z.B.
-// neu erschienene Einträge mit Link). String(array) würde nur
-// "[object Object],…" zeigen — hier stattdessen als klickbare Liste rendern.
+// neu erschienene Einträge mit Link) — dafür eine echte Listen-Darstellung
+// statt eines rohen key:value-Feldes.
+
+const LANG_STYLE: Record<string, string> = {
+  Dub: 'bg-emerald-500/15 text-emerald-300',
+  Sub: 'bg-sky-500/15 text-sky-300',
+};
+
+function LanguageBadge({ lang }: { lang: string }) {
+  return (
+    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider shrink-0 ${LANG_STYLE[lang] || 'bg-[#1f2937] text-[#9ca3af]'}`}>
+      {lang}
+    </span>
+  );
+}
+
+// Eine Zeile innerhalb einer Item-Liste: Titel (verlinkt, falls url vorhanden),
+// Sprach-Badges, Datum rechtsbündig — statt eines rohen "Titel (Sprache)"-Texthaufens.
+function ItemRow({ item }: { item: any }) {
+  const title = item && typeof item === 'object' ? (item.title ?? item.url ?? JSON.stringify(item)) : String(item);
+  const url = item && typeof item === 'object' ? item.url : null;
+  const languages: string[] = item && Array.isArray(item.languages) ? item.languages : [];
+  const date = item && typeof item === 'object' ? item.date : null;
+  const content = (
+    <>
+      <span className="flex-1 min-w-0 truncate text-sm text-white group-hover:text-emerald-300">{title}</span>
+      {languages.map(l => <LanguageBadge key={l} lang={l} />)}
+      {date && <span className="text-[11px] text-[#6b7280] shrink-0 w-24 text-right hidden sm:inline">{date}</span>}
+      {url && <ExternalLink className="w-3.5 h-3.5 text-[#4b5563] group-hover:text-emerald-400 shrink-0" />}
+    </>
+  );
+  return url ? (
+    <a href={url} target="_blank" rel="noopener noreferrer"
+      className="group flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-[#0f151f] transition-colors">
+      {content}
+    </a>
+  ) : (
+    <div className="flex items-center gap-2.5 px-3 py-2">{content}</div>
+  );
+}
+
+// Prominente Liste für den aktuellsten Lauf — das ist der eigentliche Inhalt
+// bei Listen-Manifesten, kein Nebenprodukt einer Tabellenzelle.
+function ItemsPreview({ items }: { items: any[] }) {
+  if (!items.length) return <div className="text-sm text-[#6b7280] py-6 text-center">Keine Einträge in diesem Lauf.</div>;
+  return (
+    <div className="divide-y divide-[#1f2937]/60">
+      {items.map((it, i) => <ItemRow key={i} item={it} />)}
+    </div>
+  );
+}
+
+// In der Verlaufstabelle: eingeklappt starten (sonst reißt ein 100-Einträge-
+// Ergebnis die ganze Zeile auf und lässt die Nachbarspalten wie leer wirken,
+// weil sie mittig in einer riesigen Zeile "versinken").
+function ItemsCell({ items }: { items: any[] }) {
+  const [open, setOpen] = useState(false);
+  if (!items.length) return <span className="text-[#4b5563]">— (leer)</span>;
+  return (
+    <div className="min-w-[16rem]">
+      <button onClick={() => setOpen(o => !o)}
+        className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400 hover:text-emerald-300">
+        {open ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+        {items.length} {items.length === 1 ? 'Eintrag' : 'Einträge'}
+      </button>
+      {open && (
+        <div className="mt-2 max-h-72 overflow-y-auto divide-y divide-[#1f2937]/60 border border-[#1f2937] rounded-lg bg-[#0a0a0b]">
+          {items.map((it, i) => <ItemRow key={i} item={it} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function renderCell(value: any) {
   if (value == null || value === '') return <span className="text-[#4b5563]">—</span>;
-  if (Array.isArray(value)) {
-    if (value.length === 0) return <span className="text-[#4b5563]">— (leer)</span>;
-    return (
-      <ul className="space-y-1 max-w-md">
-        {value.map((it, i) => (
-          <li key={i} className="flex items-center gap-1.5 flex-wrap">
-            {it && typeof it === 'object' && it.url ? (
-              <a href={it.url} target="_blank" rel="noopener noreferrer"
-                className="text-emerald-400 hover:text-emerald-300 hover:underline">
-                {it.title ?? it.url}
-              </a>
-            ) : (
-              <span>{typeof it === 'object' ? JSON.stringify(it) : String(it)}</span>
-            )}
-            {it && Array.isArray(it.languages) && it.languages.length > 0 && (
-              <span className="text-[10px] text-[#6b7280]">({it.languages.join('/')})</span>
-            )}
-          </li>
-        ))}
-      </ul>
-    );
-  }
+  if (Array.isArray(value)) return <ItemsCell items={value} />;
   if (typeof value === 'object') return <span className="font-mono text-xs">{JSON.stringify(value)}</span>;
   return String(value);
 }
@@ -74,6 +125,9 @@ export default function AgentResults() {
   // Chartbare Felder: mind. ein Wert numerisch parsebar
   const numericFields = fields.filter(f => (shown ?? []).some(r => toNumber(r.data?.[f]) !== null));
   const activeChart = chartField || resolved.chartField || numericFields.find(f => /price|preis|amount|value|betrag/i.test(f)) || numericFields[0] || '';
+  // Ein Chart mit nur einem Punkt sieht wie ein leerer Platzhalter aus statt
+  // wie eine echte Visualisierung — dann lieber gar nicht erst zeigen.
+  const chartPointCount = (shown ?? []).filter(r => toNumber(r.data?.[activeChart]) != null).length;
 
   // Zeitreihe [ms, Wert] chronologisch für den ECharts-Zeitachsen-Chart.
   const chartOption = useMemo<EChartsOption>(() => {
@@ -199,7 +253,19 @@ export default function AgentResults() {
           </div>
         )}
 
-        {numericFields.length > 0 && (
+        {latest && Array.isArray((latest.data as any)?.items) && (
+          <div className="bg-[#111827] border border-[#1f2937] rounded-xl p-5">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="font-semibold text-white">Einträge im letzten Lauf ({(latest.data as any).items.length})</h2>
+              <span className="text-[11px] text-[#6b7280]">Stand {format(new Date(latest.created_at), 'dd.MM.yy HH:mm')} Uhr</span>
+            </div>
+            <div className="max-h-[32rem] overflow-y-auto -mx-2">
+              <ItemsPreview items={(latest.data as any).items} />
+            </div>
+          </div>
+        )}
+
+        {numericFields.length > 0 && chartPointCount >= 2 && (
           <div className="bg-[#111827] border border-[#1f2937] rounded-xl p-5">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-semibold text-white">Verlauf</h2>
