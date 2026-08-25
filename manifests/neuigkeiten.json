@@ -8,9 +8,9 @@
       "key": "sprache",
       "label": "Sprachfilter",
       "type": "select",
-      "options": ["Deutsch (Dub oder Sub)", "Nur deutscher Dub", "Nur deutsche Untertitel", "Alle Sprachen"],
+      "options": ["Deutsch (Dub oder Sub)", "Nur deutscher Dub", "Nur Dub, absolut keine Untertitel nötig", "Nur deutsche Untertitel", "Alle Sprachen"],
       "default": "Deutsch (Dub oder Sub)",
-      "help": "Nur Einträge mit dieser Sprachverfügbarkeit auflisten."
+      "help": "„Nur Dub, absolut keine Untertitel nötig" ist am strengsten: schließt Titel aus, bei denen irgendeine Episode nur mit Untertiteln läuft — auch wenn andere Episoden schon Dub haben."
     },
     {
       "key": "limit",
@@ -42,6 +42,9 @@
   },
   "goal_template": "Neue Einträge auflisten, die die Sprachanforderung erfüllen.",
   "default_schedule": "0 9 * * *",
-  "version": 1,
-  "changelog": ["v1: Erststand — sprache/limit, count/items/newest_title/newest_url"]
+  "version": 2,
+  "changelog": [
+    "v1: Erststand — sprache/limit, count/items/newest_title/newest_url",
+    "v2: Sprachfilter „Nur Dub, absolut keine Untertitel nötig" — strenger als „Nur deutscher Dub", schließt auch Titel mit gemischten Dub/Sub-Episoden aus"
+  ]
 }

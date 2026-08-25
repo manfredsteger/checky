@@ -62,6 +62,12 @@ function languagesOf(detailHtml: string): string[] {
 
 function matchesFilter(languages: string[], mode: string): boolean {
   if (mode === 'Alle Sprachen') return true;
+  // Am strengsten: Dub muss da sein UND nirgends auf der Seite darf eine
+  // Sub-only-Episode auftauchen — sonst rutscht ein Titel durch, bei dem nur
+  // die alten Episoden gedubbt sind, die neuen aber noch nicht (Untertitel-
+  // Zwang bei den aktuellen Folgen). Das ist der Nutzerwunsch „ohne
+  // Untertitel, ohne irgendwas".
+  if (mode === 'Nur Dub, absolut keine Untertitel nötig') return languages.includes('Dub') && !languages.includes('Sub');
   if (mode === 'Nur deutscher Dub') return languages.includes('Dub');
   if (mode === 'Nur deutsche Untertitel') return languages.includes('Sub');
   return languages.length > 0; // 'Deutsch (Dub oder Sub)' (Default)
