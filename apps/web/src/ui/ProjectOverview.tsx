@@ -119,7 +119,9 @@ export function ProjectOverview({ project, agents, manifest }: {
       // Live-Link des aktuellsten Laufs — dieselbe Quelle wie "Zum Angebot"
       // auf der Agenten-Karte/Ergebnisseite, damit ein Klick auf den Namen
       // hier genauso zur fertig ausgefüllten Suche führt.
-      const latestUrl: string | null = (withNum[0]?.r.data as any)?.booking_url || (withNum[0]?.r.data as any)?._url || null;
+      // newest_url: Listen-Manifeste (z.B. "Neue Einträge") haben keinen
+      // eigenen Such-Link, sondern verweisen auf den neuesten Treffer.
+      const latestUrl: string | null = (withNum[0]?.r.data as any)?.booking_url || (withNum[0]?.r.data as any)?._url || (withNum[0]?.r.data as any)?.newest_url || null;
       return { agent: a, color: seriesColor(i), stats: statsOf(nums), lastAt, latestSuspect, latestUrl };
     }).filter((x): x is AgentStatsRow => x.stats != null);
   }, [agents, resultsByAgent, field, cutoff]);
@@ -363,7 +365,7 @@ function StatsTable({ rows, resolved }: {
                     {/* Name führt zur fertig ausgefüllten Suche (wie "Zum Angebot"), sonst zur Checky-Ergebnisseite des Agenten. */}
                     {latestUrl ? (
                       <a href={latestUrl} target="_blank" rel="noopener noreferrer"
-                        title="Zur fertig ausgefüllten Suche" className="text-white hover:text-emerald-400 hover:underline">
+                        title="Direktlink zum aktuellen Ergebnis öffnen" className="text-white hover:text-emerald-400 hover:underline">
                         {agent.name}
                       </a>
                     ) : (
