@@ -127,7 +127,6 @@ export function ProjectOverview({ project, agents, manifest }: {
   }, [agents, resultsByAgent, field, cutoff]);
 
   const seriesCount = allSeries.length;
-  const mode = modeOverride ?? (seriesCount > 6 ? 'table' : 'chart');
   const chartSeries = allSeries.slice(0, MAX_CHART_SERIES);
   const truncated = allSeries.length - chartSeries.length;
 
@@ -137,6 +136,9 @@ export function ProjectOverview({ project, agents, manifest }: {
     [allSeries],
   );
   const globalStats = statsOf(globalNums);
+  // Ein Chart mit nur einem Punkt insgesamt ist keine Visualisierung, sondern
+  // ein einsamer Kreis vor Gitterlinien — dann lieber gleich die Tabelle.
+  const mode = modeOverride ?? (seriesCount > 6 || globalNums.length < 2 ? 'table' : 'chart');
 
   const option = useMemo<EChartsOption>(() => {
     return {
