@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useQueries } from '@tanstack/react-query';
 import { splitSeries } from '../lib/series';
 import { api } from '../api/client';
@@ -32,7 +33,7 @@ interface AgentSeries {
 }
 
 type Stats = NonNullable<ReturnType<typeof statsOf>>;
-interface AgentStatsRow { agent: Agent; color: string; stats: Stats; lastAt: Date; latestSuspect: boolean; }
+interface AgentStatsRow { agent: Agent; color: string; stats: Stats; lastAt: Date; latestSuspect: boolean; latestUrl: string | null; }
 
 function statsOf(nums: number[]) {
   if (!nums.length) return null;
@@ -115,7 +116,11 @@ export function ProjectOverview({ project, agents, manifest }: {
       // unbelegter Direktflug)? Fließt in Verdict-Farbe und „Bester"-Kür ein —
       // ein nicht belegter Preis soll weder grün leuchten noch gewinnen.
       const latestSuspect = !!(withNum[0]?.r.data as any)?._suspect;
-      return { agent: a, color: seriesColor(i), stats: statsOf(nums), lastAt, latestSuspect };
+      // Live-Link des aktuellsten Laufs — dieselbe Quelle wie "Zum Angebot"
+      // auf der Agenten-Karte/Ergebnisseite, damit ein Klick auf den Namen
+      // hier genauso zur fertig ausgefüllten Suche führt.
+      const latestUrl: string | null = (withNum[0]?.r.data as any)?.booking_url || (withNum[0]?.r.data as any)?._url || null;
+      return { agent: a, color: seriesColor(i), stats: statsOf(nums), lastAt, latestSuspect, latestUrl };
     }).filter((x): x is AgentStatsRow => x.stats != null);
   }, [agents, resultsByAgent, field, cutoff]);
 
@@ -345,7 +350,7 @@ function StatsTable({ rows, resolved }: {
           </tr>
         </thead>
         <tbody>
-          {sortedRows.map(({ agent, color, stats, lastAt, latestSuspect }) => {
+          {sortedRows.map(({ agent, color, stats, lastAt, latestSuspect, latestUrl }) => {
             // Wie in ResultView: „Wunschpreis erreicht" nicht auf einem unbelegten Preis feiern.
             const rawVerdict = verdictFor(stats.latest, resolved);
             const v = latestSuspect && rawVerdict === 'good' ? 'ok' : rawVerdict;
@@ -355,7 +360,18 @@ function StatsTable({ rows, resolved }: {
                 <td className="py-2 pr-3">
                   <span className="inline-flex items-center gap-2">
                     <span className="inline-block w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: color }} />
-                    <span className="text-white">{agent.name}</span>
+                    {/* Name führt zur fertig ausgefüllten Suche (wie "Zum Angebot"), sonst zur Checky-Ergebnisseite des Agenten. */}
+                    {latestUrl ? (
+                      <a href={latestUrl} target="_blank" rel="noopener noreferrer"
+                        title="Zur fertig ausgefüllten Suche" className="text-white hover:text-emerald-400 hover:underline">
+                        {agent.name}
+                      </a>
+                    ) : (
+                      <Link to={`/agents/${agent.id}/results`} title="Ergebnisse dieses Agenten"
+                        className="text-white hover:text-emerald-400 hover:underline">
+                        {agent.name}
+                      </Link>
+                    )}
                     {isBest && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/15 text-emerald-300 uppercase tracking-wider">Bester</span>}
                     {latestSuspect && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-500/15 text-red-300 uppercase tracking-wider" title="Aktuellster Wert ist nicht belegt (z.B. Direktflug-Wunsch, den die Quelle nicht ausweist)">prüfen</span>}
                   </span>
