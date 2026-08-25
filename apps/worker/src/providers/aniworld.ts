@@ -73,9 +73,15 @@ function matchesFilter(languages: string[], mode: string): boolean {
   return languages.length > 0; // 'Deutsch (Dub oder Sub)' (Default)
 }
 
+// /neu zeigt IMMER genau die 20 neuesten Einträge — keine Pagination, kein
+// Query-Param wirkt (?page=2 liefert nachweislich dieselben 20 zurück, kein
+// "mehr anzeigen"-Link im Markup). `limit` kann also nie mehr prüfen, als die
+// Seite hergibt; `checked_total` im Ergebnis macht das ehrlich sichtbar.
+const MAX_ON_PAGE = 20;
+
 export async function fetchAniworld(params: Record<string, any>): Promise<Record<string, any>> {
   const mode = String(params.sprache || 'Deutsch (Dub oder Sub)');
-  const limit = Number(params.limit) > 0 ? Math.min(Number(params.limit), 50) : 20;
+  const limit = Number(params.limit) > 0 ? Math.min(Number(params.limit), MAX_ON_PAGE) : MAX_ON_PAGE;
 
   const listHtml = await fetchHtml('/neu');
   const candidates = parseNeuList(listHtml).slice(0, limit);

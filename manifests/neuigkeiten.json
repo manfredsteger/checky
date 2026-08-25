@@ -18,8 +18,8 @@
       "type": "number",
       "default": 20,
       "min": 5,
-      "max": 50,
-      "help": "Wie viele der neuesten Einträge pro Lauf geprüft werden (jeder braucht einen eigenen Seitenaufruf)."
+      "max": 20,
+      "help": "Deckelt, wie viele der neuesten Einträge geprüft werden. Hängt vom Quellen-Blueprint ab, wie viele die Seite überhaupt listet — bei AniWorld sind es maximal 20 (die /neu-Seite hat keine Pagination, mehr lässt sich dort technisch nicht abrufen; `checked_total` im Ergebnis zeigt die tatsächlich geprüfte Anzahl)."
     }
   ],
   "result_schema": {
@@ -42,9 +42,10 @@
   },
   "goal_template": "Neue Einträge auflisten, die die Sprachanforderung erfüllen.",
   "default_schedule": "0 9 * * *",
-  "version": 2,
+  "version": 3,
   "changelog": [
     "v1: Erststand — sprache/limit, count/items/newest_title/newest_url",
-    "v2: Sprachfilter „Nur Dub, absolut keine Untertitel nötig" — strenger als „Nur deutscher Dub", schließt auch Titel mit gemischten Dub/Sub-Episoden aus"
+    "v2: Sprachfilter „Nur Dub, absolut keine Untertitel nötig" — strenger als „Nur deutscher Dub", schließt auch Titel mit gemischten Dub/Sub-Episoden aus",
+    "v3: limit-Obergrenze auf 20 korrigiert — AniWorlds /neu-Seite listet nachweislich nie mehr, egal welcher Wert eingestellt wird (keine Pagination)"
   ]
 }
