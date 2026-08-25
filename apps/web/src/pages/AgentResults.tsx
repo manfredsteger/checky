@@ -11,6 +11,37 @@ import { splitSeries, diffToOlder } from '../lib/series';
 import { EChart } from '../ui/EChart';
 import { SERIES_COLORS, INK, baseGrid, timeAxis, valueAxis, tooltipStyle, thresholdMarkLine, fmtNum } from '../lib/chartTheme';
 
+// Manche Manifeste liefern kein einzelnes Skalar, sondern eine Liste (z.B.
+// neu erschienene Einträge mit Link). String(array) würde nur
+// "[object Object],…" zeigen — hier stattdessen als klickbare Liste rendern.
+function renderCell(value: any) {
+  if (value == null || value === '') return <span className="text-[#4b5563]">—</span>;
+  if (Array.isArray(value)) {
+    if (value.length === 0) return <span className="text-[#4b5563]">— (leer)</span>;
+    return (
+      <ul className="space-y-1 max-w-md">
+        {value.map((it, i) => (
+          <li key={i} className="flex items-center gap-1.5 flex-wrap">
+            {it && typeof it === 'object' && it.url ? (
+              <a href={it.url} target="_blank" rel="noopener noreferrer"
+                className="text-emerald-400 hover:text-emerald-300 hover:underline">
+                {it.title ?? it.url}
+              </a>
+            ) : (
+              <span>{typeof it === 'object' ? JSON.stringify(it) : String(it)}</span>
+            )}
+            {it && Array.isArray(it.languages) && it.languages.length > 0 && (
+              <span className="text-[10px] text-[#6b7280]">({it.languages.join('/')})</span>
+            )}
+          </li>
+        ))}
+      </ul>
+    );
+  }
+  if (typeof value === 'object') return <span className="font-mono text-xs">{JSON.stringify(value)}</span>;
+  return String(value);
+}
+
 export default function AgentResults() {
   const { agentId } = useParams<{ agentId: string }>();
   const [chartField, setChartField] = useState<string>('');
@@ -91,11 +122,17 @@ export default function AgentResults() {
     if (kind === 'json') {
       blob = new Blob([JSON.stringify(results, null, 2)], { type: 'application/json' });
     } else {
+      const csvValue = (v: any): string => {
+        if (v == null) return '';
+        if (Array.isArray(v)) return v.map(it => it && typeof it === 'object' ? `${it.title ?? ''} (${it.url ?? ''})` : String(it)).join(' | ');
+        if (typeof v === 'object') return JSON.stringify(v);
+        return String(v);
+      };
       const rows = [['Datum', 'Geändert', ...fields].join(',')];
       results.forEach(r => rows.push([
         format(new Date(r.created_at), 'yyyy-MM-dd HH:mm:ss'),
         r.changed ? 'ja' : 'nein',
-        ...fields.map(f => `"${String(r.data?.[f] ?? '').replace(/"/g, '""')}"`),
+        ...fields.map(f => `"${csvValue(r.data?.[f]).replace(/"/g, '""')}"`),
       ].join(',')));
       blob = new Blob([rows.join('\n')], { type: 'text/csv' });
     }
@@ -196,7 +233,7 @@ export default function AgentResults() {
                           : <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#1f2937] text-[#9ca3af]">gleich</span>}
                       </td>
                       {fields.map(f => (
-                        <td key={f} className="p-3 text-white whitespace-nowrap">{r.data?.[f] != null ? String(r.data[f]) : <span className="text-[#4b5563]">—</span>}</td>
+                        <td key={f} className={`p-3 text-white ${Array.isArray(r.data?.[f]) ? 'align-top' : 'whitespace-nowrap'}`}>{renderCell(r.data?.[f])}</td>
                       ))}
                     </tr>
                   ))}

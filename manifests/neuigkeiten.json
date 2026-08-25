@@ -1,0 +1,47 @@
+{
+  "id": "neuigkeiten",
+  "name": "Neue Einträge",
+  "icon": "bell",
+  "description": "Beobachtet eine Neuigkeiten-/Katalogseite auf frisch hinzugefügte Einträge und listet sie mit Link auf.",
+  "params": [
+    {
+      "key": "sprache",
+      "label": "Sprachfilter",
+      "type": "select",
+      "options": ["Deutsch (Dub oder Sub)", "Nur deutscher Dub", "Nur deutsche Untertitel", "Alle Sprachen"],
+      "default": "Deutsch (Dub oder Sub)",
+      "help": "Nur Einträge mit dieser Sprachverfügbarkeit auflisten."
+    },
+    {
+      "key": "limit",
+      "label": "Geprüfte neueste Einträge",
+      "type": "number",
+      "default": 20,
+      "min": 5,
+      "max": 50,
+      "help": "Wie viele der neuesten Einträge pro Lauf geprüft werden (jeder braucht einen eigenen Seitenaufruf)."
+    }
+  ],
+  "result_schema": {
+    "type": "object",
+    "properties": {
+      "count": { "type": "number" },
+      "items": { "type": "array" },
+      "newest_title": { "type": "string" },
+      "newest_url": { "type": "string" }
+    },
+    "required": ["count", "items"]
+  },
+  "display": {
+    "headline": "count",
+    "chart_field": "count",
+    "unit": "Treffer",
+    "secondary": [
+      { "field": "newest_title", "label": "Neuester" }
+    ]
+  },
+  "goal_template": "Neue Einträge auflisten, die die Sprachanforderung erfüllen.",
+  "default_schedule": "0 9 * * *",
+  "version": 1,
+  "changelog": ["v1: Erststand — sprache/limit, count/items/newest_title/newest_url"]
+}

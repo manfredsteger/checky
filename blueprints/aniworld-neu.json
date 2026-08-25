@@ -1,0 +1,13 @@
+{
+  "id": "aniworld-neu",
+  "name": "AniWorld – Neue Animes",
+  "manifest_id": "neuigkeiten",
+  "kind": "api",
+  "provider": "aniworld",
+  "icon": "bell",
+  "description": "Neu hinzugefügte Animes auf aniworld.to, gefiltert auf deutsche Sprachverfügbarkeit (Dub/Sub anhand der Flaggen-Icons auf der Serienseite).",
+  "note": "Liest /neu (Titel+Link), prüft je Titel die Serienseite auf die Flaggen-Icons german.svg (Dub) / japanese-german.svg (Sub). Kein Anti-Bot auf aniworld.to festgestellt (einfacher HTTP-Abruf reicht, kein Playwright nötig).",
+  "site": "https://aniworld.to/neu",
+  "default_schedule": "0 9 * * *",
+  "version": 1
+}
