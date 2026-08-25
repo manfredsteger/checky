@@ -5,7 +5,7 @@ import { api } from '../api/client';
 import type { Agent, Project, Manifest, Result } from '@checky/shared';
 import type { EChartsOption } from 'echarts';
 import { format } from 'date-fns';
-import { BarChart3, Table2 } from 'lucide-react';
+import { BarChart3, Table2, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import { EChart } from './EChart';
 import { resolveDisplay, toNumber, verdictFor, trendOf, VERDICT_STYLE } from '../lib/resultDisplay';
 import { seriesColor, INK, baseGrid, timeAxis, valueAxis, tooltipStyle, thresholdMarkLine, fmtNum } from '../lib/chartTheme';
@@ -257,6 +257,25 @@ function TrendCell({ latest, prev, trendGood }: { latest: number; prev: number |
   );
 }
 
+type SortKey = 'agent' | 'latest' | 'avg' | 'min' | 'max' | 'trend' | 'count' | 'stand';
+
+// Klickbare Spaltenüberschrift mit Sortier-Pfeil — dieselbe Kopfzelle dient
+// als Sortier-Knopf, damit "auf- und absteigend sortierbar" ohne zweite
+// Steuerzeile auskommt.
+function SortableTh({ label, active, dir, onClick, align = 'right' }: {
+  label: string; active: boolean; dir: 'asc' | 'desc'; onClick: () => void; align?: 'left' | 'right';
+}) {
+  return (
+    <button onClick={onClick}
+      className={`inline-flex items-center gap-1 hover:text-white transition-colors ${align === 'right' ? 'flex-row-reverse' : ''} ${active ? 'text-white' : ''}`}>
+      <span>{label}</span>
+      {active
+        ? (dir === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)
+        : <ChevronsUpDown className="w-3 h-3 opacity-40" />}
+    </button>
+  );
+}
+
 function StatsTable({ rows, resolved }: {
   rows: AgentStatsRow[];
   resolved: ReturnType<typeof resolveDisplay>;
@@ -274,23 +293,59 @@ function StatsTable({ rows, resolved }: {
     return (resolved.trendGood === 'down' ? v < acc.v : v > acc.v) ? { id: r.agent.id, v } : acc;
   }, null);
 
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
+    else { setSortKey(key); setSortDir('asc'); }
+  };
+
+  const sortValue = (r: AgentStatsRow, key: SortKey): number | string => {
+    switch (key) {
+      case 'agent': return r.agent.name.toLowerCase();
+      case 'latest': return r.stats.latest;
+      case 'avg': return r.stats.avg;
+      case 'min': return r.stats.min;
+      case 'max': return r.stats.max;
+      // Vorzeichenbehafteter Sprung latest-prev, nicht die (absolute) Prozentanzeige.
+      case 'trend': return r.stats.prev != null ? r.stats.latest - r.stats.prev : 0;
+      case 'count': return r.stats.count;
+      case 'stand': return r.lastAt ? new Date(r.lastAt).getTime() : 0;
+    }
+  };
+
+  const sortedRows = useMemo(() => {
+    if (!sortKey) return rows;
+    return [...rows].sort((a, b) => {
+      const va = sortValue(a, sortKey), vb = sortValue(b, sortKey);
+      const cmp = typeof va === 'string' ? va.localeCompare(vb as string) : (va as number) - (vb as number);
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, sortKey, sortDir]);
+
+  const th = (key: SortKey, label: string, align: 'left' | 'right' = 'right') => (
+    <SortableTh label={label} active={sortKey === key} dir={sortDir} align={align} onClick={() => toggleSort(key)} />
+  );
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-left text-sm">
         <thead>
           <tr className="text-xs uppercase tracking-wider text-[#6b7280] border-b border-[#1f2937]">
-            <th className="py-2 pr-3">Agent</th>
-            <th className="py-2 px-3 text-right">Aktuell{u}</th>
-            <th className="py-2 px-3 text-right">Ø</th>
-            <th className="py-2 px-3 text-right">Min</th>
-            <th className="py-2 px-3 text-right">Max</th>
-            <th className="py-2 px-3 text-right">Trend</th>
-            <th className="py-2 px-3 text-right">Läufe</th>
-            <th className="py-2 pl-3 text-right whitespace-nowrap">Stand</th>
+            <th className="py-2 pr-3">{th('agent', 'Agent', 'left')}</th>
+            <th className="py-2 px-3 text-right">{th('latest', `Aktuell${u}`)}</th>
+            <th className="py-2 px-3 text-right">{th('avg', 'Ø')}</th>
+            <th className="py-2 px-3 text-right">{th('min', 'Min')}</th>
+            <th className="py-2 px-3 text-right">{th('max', 'Max')}</th>
+            <th className="py-2 px-3 text-right">{th('trend', 'Trend')}</th>
+            <th className="py-2 px-3 text-right">{th('count', 'Läufe')}</th>
+            <th className="py-2 pl-3 text-right whitespace-nowrap">{th('stand', 'Stand')}</th>
           </tr>
         </thead>
         <tbody>
-          {rows.map(({ agent, color, stats, lastAt, latestSuspect }) => {
+          {sortedRows.map(({ agent, color, stats, lastAt, latestSuspect }) => {
             // Wie in ResultView: „Wunschpreis erreicht" nicht auf einem unbelegten Preis feiern.
             const rawVerdict = verdictFor(stats.latest, resolved);
             const v = latestSuspect && rawVerdict === 'good' ? 'ok' : rawVerdict;
