@@ -1,13 +1,13 @@
 {
   "id": "aniworld-neu",
-  "name": "AniWorld – Neue Animes",
+  "name": "AniWorld – Neue Episoden",
   "manifest_id": "neuigkeiten",
   "kind": "api",
   "provider": "aniworld",
   "icon": "bell",
-  "description": "Neu hinzugefügte Animes auf aniworld.to, gefiltert auf deutsche Sprachverfügbarkeit (Dub/Sub anhand der Flaggen-Icons auf der Serienseite).",
-  "note": "Liest /neu (Titel+Link), prüft je Titel die Serienseite auf die Flaggen-Icons german.svg (Dub) / japanese-german.svg (Sub). Kein Anti-Bot auf aniworld.to festgestellt (einfacher HTTP-Abruf reicht, kein Playwright nötig).",
-  "site": "https://aniworld.to/neu",
+  "description": "Neu veröffentlichte Episoden auf aniworld.to (neue Serien wie auch neue Folgen laufender Serien), gefiltert auf deutsche Sprachverfügbarkeit — Sprache steht direkt pro Zeile, kein Zusatz-Abruf pro Titel nötig.",
+  "note": "Liest /neue-episoden — jede Zeile ist EIN Sprach-Release einer Episode (Titel, Staffel/Episode, Datum, Flaggen-Icon, optional \"Neu!\"-Badge), aktuell ~150 Zeilen in einem Abruf. Flaggen: german.svg=Dub, japanese-german.svg=Sub, japanese-english.svg=EN-Sub. Kein Anti-Bot auf aniworld.to festgestellt (einfacher HTTP-Abruf reicht, kein Playwright nötig). Vorgänger war /neu (nur Serientitel, hart auf 20 gedeckelt, keine Sprache direkt, brauchte einen Abruf je Serienseite) — abgelöst, weil diese Seite mehr Daten in einem einzigen, schnelleren Abruf liefert.",
+  "site": "https://aniworld.to/neue-episoden",
   "default_schedule": "0 9 * * *",
-  "version": 1
+  "version": 2
 }

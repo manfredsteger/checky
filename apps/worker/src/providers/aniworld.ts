@@ -1,16 +1,21 @@
-// AniWorld „Neu"-Provider (kind:api). Liest die /neu-Übersicht (neu
-// hinzugefügte Animes) und prüft je Titel die Serienseite auf die
-// Sprach-Flaggen-Icons, um nur Einträge mit der gewünschten deutschen
-// Sprachverfügbarkeit zu melden.
+// AniWorld „Neue Episoden"-Provider (kind:api). Liest /neue-episoden, die
+// gemeinsame Release-Liste für neue Episoden UND neue Serien (jede Zeile ist
+// EIN konkretes Sprach-Release einer Episode — Titel, Episodennummer, Datum,
+// Sprach-Flagge, optional "Neu!"-Markierung).
+//
+// Vorgänger-Ansatz war /neu (nur Serientitel, hart auf 20 Einträge gedeckelt,
+// keine Sprachangabe direkt — brauchte einen Zusatz-Abruf JE Titel). Diese
+// Seite hier liefert bis zu 150+ Einträge in EINEM einzigen Abruf, inklusive
+// exakter Sprachangabe pro Zeile — kein Fan-out auf Serienseiten mehr nötig.
 //
 // Bewusst OHNE Playwright: aniworld.to liefert das Markup einem einfachen
 // HTTP-GET ohne Anti-Bot-Hürde aus (per curl verifiziert, HTTP 200 mit echtem
-// Inhalt) — ein Recipe/Browser-Lauf wäre hier nur unnötiger Overhead.
+// Inhalt).
 //
 // Kein HTML-Parser als Abhängigkeit: Die Seite hat eine sehr stabile, enge
-// Struktur (ein <a href="/anime/stream/…" title="…"> pro Karte, Flaggen als
-// <img class="flag" src=".../german.svg"|".../japanese-german.svg">), dafür
-// reichen gezielte Regexe.
+// Struktur pro Zeile (Anker mit Titel/Episode/Datum, direkt gefolgt vom
+// Flaggen-<img data-src="…svg">, optional gefolgt vom "Neu!"-Badge) — dafür
+// reicht ein gezielter Regex.
 
 const BASE = 'https://aniworld.to';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36';
@@ -23,10 +28,9 @@ async function fetchHtml(path: string): Promise<string> {
   return res.text();
 }
 
-interface NeuItem { title: string; url: string; }
-
-// Titel stecken als rohes HTML-Attribut im Markup — verbreitete Entities
-// decodieren, sonst steht z.B. "Aren&#039;t Wicked" statt "Aren't Wicked" da.
+// Titel/Episodenlabel stecken als rohes HTML entity-kodiert im Markup —
+// verbreitete Entities decodieren, sonst steht z.B. "Aren&#039;t Wicked"
+// statt "Aren't Wicked" da.
 function decodeEntities(s: string): string {
   return s
     .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
@@ -34,88 +38,106 @@ function decodeEntities(s: string): string {
     .replace(/&uuml;/g, 'ü').replace(/&ouml;/g, 'ö').replace(/&auml;/g, 'ä').replace(/&szlig;/g, 'ß');
 }
 
-// Jede Karte auf /neu: <a href="/anime/stream/<slug>" title="<Titel> stream online mit Schauspieler …">
-// Titel + Link stecken beide im selben <a>-Tag, kein zweiter Anker pro Karte.
-function parseNeuList(html: string): NeuItem[] {
-  const re = /<a href="(\/anime\/stream\/[^"]+)" title="([^"]+?) stream online/g;
-  const seen = new Set<string>();
-  const items: NeuItem[] = [];
+// Flaggen-Dateiname -> Klartext-Sprache. Nur die drei bislang beobachteten
+// (german/japanese-german/japanese-english) sind bekannt; alles andere wird
+// roh durchgereicht statt verschluckt (neue Flagge auf der Seite soll
+// sichtbar bleiben, nicht stumm rausfallen).
+const FLAG_LABEL: Record<string, string> = {
+  'german': 'Dub',
+  'japanese-german': 'Sub',
+  'japanese-english': 'EN-Sub',
+  'english': 'EN-Dub',
+  'japanese': 'Raw (JP)',
+};
+
+function languageOf(flagPath: string): string {
+  const key = (flagPath.match(/\/([a-z-]+)\.svg$/i)?.[1] || '').toLowerCase();
+  return FLAG_LABEL[key] || key || 'unbekannt';
+}
+
+interface EpisodeRow {
+  title: string;
+  url: string;
+  episode: string;   // z.B. "S01 E19"
+  date: string;       // z.B. "Di, 25.08.2026"
+  language: string;   // "Dub" | "Sub" | "EN-Sub" | …
+  isNew: boolean;
+}
+
+// Eine Zeile der Liste: Anker (Titel+Episode+Datum), direkt gefolgt vom
+// Flaggen-Icon, optional gefolgt vom grünen "Neu!"-Badge.
+const ROW_RE = new RegExp(
+  '<a href="(/anime/stream/[^"]+)">\\s*' +
+  '<strong>([^<]+)</strong>\\s*' +
+  '<span class="listTag bigListTag[^"]*">([^<]+)</span>\\s*' +
+  '<span class="elementFloatRight">([^<]+)</span>\\s*' +
+  '</a>\\s*' +
+  '<img class="flag"[^>]*data-src="([^"]+)"[^>]*>' +
+  '(?:\\s*<noscript>.*?</noscript>)?\\s*' +
+  '(<span class="listTag bigListTag green right">Neu!</span>)?',
+  'gs',
+);
+
+function parseEpisodeList(html: string): EpisodeRow[] {
+  const rows: EpisodeRow[] = [];
   let m: RegExpExecArray | null;
-  while ((m = re.exec(html))) {
-    const [, href, rawTitle] = m;
-    if (seen.has(href)) continue;
-    seen.add(href);
-    items.push({ title: decodeEntities(rawTitle.trim()), url: `${BASE}${href}` });
+  ROW_RE.lastIndex = 0;
+  while ((m = ROW_RE.exec(html))) {
+    const [, href, rawTitle, episode, date, flagPath, neuBadge] = m;
+    rows.push({
+      title: decodeEntities(rawTitle.trim()),
+      url: `${BASE}${href}`,
+      episode: episode.trim(),
+      date: date.trim(),
+      language: languageOf(flagPath),
+      isNew: !!neuBadge,
+    });
   }
-  return items;
+  return rows;
 }
 
-// Flaggen auf der Serienseite: german.svg = deutscher Dub, japanese-german.svg
-// = deutsche Untertitel (Original-Ton + deutscher Sub). Beide können auf
-// derselben Seite vorkommen (unterschiedliche Staffeln/Episoden).
-function languagesOf(detailHtml: string): string[] {
-  const langs: string[] = [];
-  if (detailHtml.includes('german.svg')) langs.push('Dub');
-  if (detailHtml.includes('japanese-german.svg')) langs.push('Sub');
-  return langs;
-}
-
-function matchesFilter(languages: string[], mode: string): boolean {
+function matchesFilter(language: string, mode: string): boolean {
   if (mode === 'Alle Sprachen') return true;
-  // Am strengsten: Dub muss da sein UND nirgends auf der Seite darf eine
-  // Sub-only-Episode auftauchen — sonst rutscht ein Titel durch, bei dem nur
-  // die alten Episoden gedubbt sind, die neuen aber noch nicht (Untertitel-
-  // Zwang bei den aktuellen Folgen). Das ist der Nutzerwunsch „ohne
-  // Untertitel, ohne irgendwas".
-  if (mode === 'Nur Dub, absolut keine Untertitel nötig') return languages.includes('Dub') && !languages.includes('Sub');
-  if (mode === 'Nur deutscher Dub') return languages.includes('Dub');
-  if (mode === 'Nur deutsche Untertitel') return languages.includes('Sub');
-  return languages.length > 0; // 'Deutsch (Dub oder Sub)' (Default)
+  if (mode === 'Nur deutsche Untertitel') return language === 'Sub';
+  // "Nur deutscher Dub" und "Nur Dub, absolut keine Untertitel nötig" sind
+  // auf dieser Seite gleichbedeutend: jede Zeile ist bereits EIN konkretes
+  // Sprach-Release (nicht mehr eine ganze Serie mit gemischten Episoden wie
+  // beim alten /neu-Ansatz) — eine als "Dub" markierte Zeile verlangt schon
+  // per Definition keine Untertitel.
+  if (mode === 'Nur deutscher Dub' || mode === 'Nur Dub, absolut keine Untertitel nötig') return language === 'Dub';
+  return language === 'Dub' || language === 'Sub'; // 'Deutsch (Dub oder Sub)' (Default)
 }
-
-// /neu zeigt IMMER genau die 20 neuesten Einträge — keine Pagination, kein
-// Query-Param wirkt (?page=2 liefert nachweislich dieselben 20 zurück, kein
-// "mehr anzeigen"-Link im Markup). `limit` kann also nie mehr prüfen, als die
-// Seite hergibt; `checked_total` im Ergebnis macht das ehrlich sichtbar.
-const MAX_ON_PAGE = 20;
 
 export async function fetchAniworld(params: Record<string, any>): Promise<Record<string, any>> {
   const mode = String(params.sprache || 'Deutsch (Dub oder Sub)');
-  const limit = Number(params.limit) > 0 ? Math.min(Number(params.limit), MAX_ON_PAGE) : MAX_ON_PAGE;
 
-  const listHtml = await fetchHtml('/neu');
-  const candidates = parseNeuList(listHtml).slice(0, limit);
-  if (!candidates.length) {
-    throw new Error('AniWorld: /neu lieferte keine Einträge — Seitenstruktur hat sich vermutlich geändert');
+  const html = await fetchHtml('/neue-episoden');
+  const all = parseEpisodeList(html);
+  if (!all.length) {
+    throw new Error('AniWorld: /neue-episoden lieferte keine Einträge — Seitenstruktur hat sich vermutlich geändert');
   }
 
-  const checked: (NeuItem & { languages: string[] })[] = [];
-  let detailErrors = 0;
-  for (const item of candidates) {
-    try {
-      const detail = await fetchHtml(item.url.replace(BASE, ''));
-      checked.push({ ...item, languages: languagesOf(detail) });
-    } catch {
-      detailErrors++;
-    }
-    // Höflich bleiben — keine Anfragenflut gegen die Serienseiten.
-    await new Promise(r => setTimeout(r, 300));
-  }
+  // limit begrenzt, wie viele der geladenen Zeilen ausgewertet werden — die
+  // Seite selbst liefert immer ihre volle aktuelle Liste (aktuell ~150) in
+  // einem Abruf, `available_total` macht die tatsächliche Seitengröße
+  // sichtbar statt sie zu erraten.
+  const limit = Number(params.limit) > 0 ? Math.min(Number(params.limit), all.length) : all.length;
+  const candidates = all.slice(0, limit);
 
-  const matches = checked.filter(i => matchesFilter(i.languages, mode));
+  const matches = candidates.filter(r => matchesFilter(r.language, mode));
 
-  const result: Record<string, any> = {
+  return {
     count: matches.length,
-    items: matches.map(i => ({ title: i.title, url: i.url, languages: i.languages })),
+    items: matches.map(r => ({
+      title: `${r.title} — ${r.episode}`,
+      url: r.url,
+      languages: [r.language],
+      date: r.date,
+      is_new: r.isNew,
+    })),
     newest_title: matches[0]?.title ?? null,
     newest_url: matches[0]?.url ?? null,
     checked_total: candidates.length,
+    available_total: all.length,
   };
-  // Ehrlich markieren statt still unvollständig liefern, falls einzelne
-  // Serienseiten nicht lesbar waren — sonst könnte ein neuer Eintrag fehlen,
-  // ohne dass das irgendwo sichtbar wird.
-  if (detailErrors > 0) {
-    result._suspect = `${detailErrors} von ${candidates.length} Serienseiten waren nicht lesbar — die Liste kann unvollständig sein.`;
-  }
-  return result;
 }

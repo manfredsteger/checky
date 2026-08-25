@@ -16,10 +16,10 @@
       "key": "limit",
       "label": "Geprüfte neueste Einträge",
       "type": "number",
-      "default": 20,
+      "default": 150,
       "min": 5,
-      "max": 20,
-      "help": "Deckelt, wie viele der neuesten Einträge geprüft werden. Hängt vom Quellen-Blueprint ab, wie viele die Seite überhaupt listet — bei AniWorld sind es maximal 20 (die /neu-Seite hat keine Pagination, mehr lässt sich dort technisch nicht abrufen; `checked_total` im Ergebnis zeigt die tatsächlich geprüfte Anzahl)."
+      "max": 500,
+      "help": "Deckelt, wie viele der neuesten Zeilen ausgewertet werden. Wie viele eine Quelle tatsächlich auf einmal liefert, hängt vom Blueprint ab — `available_total` im Ergebnis zeigt die reale Seitengröße, `checked_total` wie viele davon wirklich ausgewertet wurden (nie mehr als die Quelle hergibt, auch wenn hier ein höherer Wert steht)."
     }
   ],
   "result_schema": {
@@ -28,7 +28,9 @@
       "count": { "type": "number" },
       "items": { "type": "array" },
       "newest_title": { "type": "string" },
-      "newest_url": { "type": "string" }
+      "newest_url": { "type": "string" },
+      "checked_total": { "type": "number" },
+      "available_total": { "type": "number" }
     },
     "required": ["count", "items"]
   },
@@ -37,15 +39,17 @@
     "chart_field": "count",
     "unit": "Treffer",
     "secondary": [
-      { "field": "newest_title", "label": "Neuester" }
+      { "field": "newest_title", "label": "Neuester" },
+      { "field": "available_total", "label": "von insgesamt" }
     ]
   },
   "goal_template": "Neue Einträge auflisten, die die Sprachanforderung erfüllen.",
   "default_schedule": "0 9 * * *",
-  "version": 3,
+  "version": 4,
   "changelog": [
     "v1: Erststand — sprache/limit, count/items/newest_title/newest_url",
     "v2: Sprachfilter „Nur Dub, absolut keine Untertitel nötig" — strenger als „Nur deutscher Dub", schließt auch Titel mit gemischten Dub/Sub-Episoden aus",
-    "v3: limit-Obergrenze auf 20 korrigiert — AniWorlds /neu-Seite listet nachweislich nie mehr, egal welcher Wert eingestellt wird (keine Pagination)"
+    "v3: limit-Obergrenze auf 20 korrigiert — AniWorlds /neu-Seite listet nachweislich nie mehr, egal welcher Wert eingestellt wird (keine Pagination)",
+    "v4: available_total ergänzt — AniWorld-Blueprint wechselt von /neu (20, Titel ohne Sprachangabe) auf /neue-episoden (150+ Episoden-Releases inkl. Sprache pro Zeile in einem Abruf)"
   ]
 }
