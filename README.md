@@ -24,6 +24,8 @@ Ein KI-Agent lernt einen Check **einmal** per natürlicher Sprache an und friert
 - [Konfiguration (.env)](#konfiguration-env)
 - [Ports & Endpunkte](#ports--endpunkte)
 - [Bedienung im Dashboard](#bedienung-im-dashboard)
+- [Der schnellste Weg: Deep-Link statt Anlernen](#der-schnellste-weg-deep-link-statt-anlernen)
+- [API-Quellen (`kind: api`) — ganz ohne Browser](#api-quellen-kind-api--ganz-ohne-browser)
 - [Einen Check anlernen (Recorder)](#einen-check-anlernen-recorder)
 - [Anti-Detection](#anti-detection)
 - [API-Referenz](#api-referenz)
@@ -49,7 +51,7 @@ Projekt "Flugsuche Beispielreise"   (wählt einen Tracking-Typ + zentrale Parame
  └─ Agent  google.com/flights · gleiche Route               · 2×/Woche
 ```
 
-Typische Einsätze: **Flugpreise**, **Heizölpreise**, Produkt-/Angebotspreise, Ticket-Verfügbarkeiten, Status-/Wartungsseiten.
+Typische Einsätze: **Flugpreise**, **Heizölpreise**, **Produktpreise** (Amazon & Co.), Ticket-Verfügbarkeiten, Status-/Wartungsseiten, **Neuigkeiten-Feeds** (neue Folgen/Titel auf einer Katalogseite, gefiltert z.B. nach Sprache).
 
 ## Kernkonzept: Anlernen → Abspielen → Heilen
 
@@ -69,9 +71,9 @@ Manifest   (Tracking-Typ)      WAS: Parameter-Formular + Ergebnis-Darstellung   
         └─ Recipe (angelernt)  WIE: Playwright-Schritte, pro Agent, teilbar      DB-Tabelle recipes
 ```
 
-- **Manifest** — ein Tracking-*Typ* wie `flight`, `heizoel`, `generic`. Deklariert das typisierte Parameter-Formular, das Ergebnis-Schema und über `display`, welches Feld die **Kennzahl** ist (Preis), welche **Einheit** gilt und welche Parameter **Wunsch-/Schmerzgrenze** definieren. Rein deklaratives JSON.
-- **Blueprint** — eine fertig vorbereitete *Quelle* wie `idealo-flug`, die auf ein Manifest verweist und `site` + `goal_template` mitbringt. Mehrere Blueprints teilen sich ein Manifest.
-- **Recipe** — die beim Anlernen aufgezeichneten, **versionierten** Schritte eines konkreten Agenten.
+- **Manifest** — ein Tracking-*Typ* wie `flight`, `heizoel`, `produkt` (Online-Preise), `neuigkeiten` (Listen neuer Einträge statt eines Preises) oder `generic`. Deklariert das typisierte Parameter-Formular, das Ergebnis-Schema und über `display`, welches Feld die **Kennzahl** ist (Preis/Treffer-Anzahl), welche **Einheit** gilt und welche Parameter **Wunsch-/Schmerzgrenze** definieren. Rein deklaratives JSON.
+- **Blueprint** — eine fertig vorbereitete *Quelle* wie `idealo-flug`, die auf ein Manifest verweist und `site` + `goal_template` mitbringt. Mehrere Blueprints teilen sich ein Manifest. Ein Blueprint liefert seine Daten auf einem von zwei Wegen (`kind`): **`browser`** (Recipe/Playwright, angelernt oder Deep-Link) oder **`api`** (fester Adapter in `apps/worker/src/providers/`, kein Browser nötig) — siehe [API-Quellen](#api-quellen-kind-api--ganz-ohne-browser).
+- **Recipe** — die beim Anlernen aufgezeichneten, **versionierten** Schritte eines konkreten Agenten (nur bei `kind: browser`).
 
 Ein **Projekt** wählt ein Manifest und setzt dessen Parameter **einmal zentral**; seine **Agenten** erben diese und dürfen sie überschreiben. Der Worker merged `{…Projekt, …Agent}` und füllt damit `{{platzhalter}}` in Goal & Recipe.
 
@@ -247,6 +249,9 @@ Weitere, in `docker-compose.yml` gesetzte Variablen: `SCREENSHOT_DIR`, `HEADLESS
 - **Massenaktionen**: „Alle aktivieren / pausieren / ausführen" im Projekt-Kopf.
 - **Live-Anzeige**: Läuft gerade etwas, zeigen Agenten-Karte, Projekt-Kachel und Sidebar das sofort — Fortschrittsbalken (bestimmt, sobald aus früheren Läufen eine Erwartungsdauer bekannt ist), Laufzeit und Restschätzung. Sehr kurze Läufe (API-Quellen sind teils in Millisekunden fertig) quittieren stattdessen für ~12 s mit „Aktualisiert vor Xs". Hängt ein Lauf ungewöhnlich lange, wird er amber. Die Kacheln laden ihr Ergebnis danach von selbst nach — kein Neuladen nötig.
 - **Ergebnisse**: Kennzahl (Preis) groß und farbig — grün bei erreichtem **Wunschpreis**, rot über der **Schmerzgrenze** — plus Verlaufs-Chart mit Ziel-/Grenz-Linien und CSV-/JSON-Export.
+- **Plausibilitäts-Badge „prüfen"**: Kann eine Quelle einen behaupteten Direktflug/Filter nicht wirklich belegen (z.B. keine Stopp-Angabe), bleibt der Preis neutral statt grün — ein unbelegter Wert soll nicht wie ein bestätigter Erfolg aussehen.
+- **Projekt-Übersicht** (Kopfzeile-Umschalter „Übersicht"): vergleicht die Kennzahl **über alle Agenten eines Projekts** — Mehrlinien-Chart oder sortierbare Tabelle (Ø/Min/Max/Trend), automatisch passend zur Anzahl der Quellen.
+- **Messreihen**: Änderst du zentrale Parameter (Route, Sprachfilter, …), zählt das als neue Messreihe — ältere Werte werden nicht stillschweigend weiterverglichen, sondern als „nicht vergleichbar" gekennzeichnet und lassen sich optional einblenden.
 
 ## Der schnellste Weg: Deep-Link statt Anlernen
 
@@ -311,6 +316,24 @@ Für Datumsformate gibt es fertige abgeleitete Parameter: `{{outbound}}` (ISO),
 > greift ins Leere — und der Layer legt sich danach über die Seite und verschluckt
 > jeden Klick. `dismissConsent` fasst deshalb einmal nach.
 
+## API-Quellen (`kind: api`) — ganz ohne Browser
+
+Manche Quellen brauchen gar kein Playwright: liefert eine Seite ihre Daten über eine
+schlüssellose JSON-Schnittstelle aus, holt ein fester **Provider** (`apps/worker/src/providers/<id>.ts`)
+das Ergebnis direkt per `fetch()` — schneller, robuster gegen Layout-Änderungen und ganz ohne
+Bot-Schutz-Sorgen. Ein Blueprint mit `"kind": "api", "provider": "<id>"` aktiviert das; der Agent
+bekommt in der Oberfläche das Abzeichen **„API · `<id>`"** und braucht kein Anlernen.
+
+| Provider | Quelle | Liefert |
+|---|---|---|
+| `kiwi` | `api.skypicker.com` (Kiwi.com, keyless) | Flugpreis, Airline, Stopps, Dauer — inkl. Direktflug-Filter |
+| `esyoil` | esyoil.com | Bundesweiter Heizölpreis €/100L |
+| `heizoel24` | heizoel24.de | Heizölpreis €/100L für eine konkrete PLZ + Liefermenge |
+| `aniworld` | aniworld.to/neue-episoden | Neue Episoden/Serien, gefiltert nach Sprache, inkl. Genre je Serie |
+
+Eigenen Provider ergänzen: `apps/worker/src/providers/<id>.ts` mit einer `fetch<Id>(params)`-Funktion
+schreiben, in `providers/index.ts` registrieren, dazu einen Blueprint mit `kind: "api"` anlegen.
+
 ## Einen Check anlernen (Recorder)
 
 Nur nötig, wenn die Quelle weder Deep-Link noch bedienbare Suchmaske hat.
@@ -369,6 +392,7 @@ Basis: `http://localhost:8080`
 - `GET /api/manifests` · `GET /api/manifests/:id`
 - `GET /api/blueprints[?manifest_id=]` · `GET /api/blueprints/:id`
 - `GET /api/library/export?manifests=&blueprints=` · `POST /api/library/import`
+- `GET /api/places?q=` — Flughafen-/Städtesuche (Kiwi-Places, keyless) fürs Routen-Eingabefeld im Dashboard
 
 **Betrieb**
 - `GET /api/settings` · `PUT /api/settings` · `POST /api/admin/cleanup`
@@ -397,6 +421,7 @@ apps/
     src/browser.ts           Browser-Start + Anti-Detection
     src/notify.ts            Webhook/Matrix
     src/aiProvider.ts        KI: Selektor heilen + JSON-Extraktion
+    src/providers/           API-Quellen ohne Browser (kiwi, esyoil, heizoel24, aniworld, …)
 packages/
   shared/  Zod-Schemas als einzige Quelle der Wahrheit (Typen für api + web)
 manifests/   Tracking-Typen  (git-versioniert, live-gemountet)
@@ -408,7 +433,8 @@ blueprints/  Quellen         (git-versioniert, live-gemountet)
 | Ziel | Schritt |
 |---|---|
 | Neuer Tracking-Typ (z.B. Strompreis) | `manifests/strom.json` anlegen — nur JSON, kein Code |
-| Neue Quelle für einen Typ | `blueprints/<id>.json` mit `manifest_id` anlegen |
+| Neue Quelle für einen Typ (Browser/Recipe) | `blueprints/<id>.json` mit `manifest_id` anlegen |
+| Neue Quelle ohne Browser (`kind: api`) | `apps/worker/src/providers/<id>.ts` + Registrierung in `providers/index.ts` + Blueprint mit `kind:"api"` |
 | Neue API-Domäne | `routes/<name>.ts` schreiben + eine Zeile `app.use(...)` in `app.ts` |
 | Fremden Baustein übernehmen | Bundle über `POST /api/library/import` |
 
@@ -444,7 +470,6 @@ Version und Image **immer gemeinsam** anheben, sonst passen Browser und Library 
 
 ## Roadmap
 
-- Frontend-UI für **Blueprint-Auswahl** beim Agent-Anlegen + Bundle-Import/Export-Buttons.
-- **Recipes in Bundles** aufnehmen (angelernte Schritte teilen).
-- **Agent-Klassifizierung/Tags** (Status- vs. Preis- vs. Verfügbarkeits-Agent).
+- **Recipes in Bundles** aufnehmen (angelernte Schritte teilen — Export/Import kennt aktuell nur Manifeste/Blueprints).
 - Community-Repo für Manifeste, Blueprints und Recipes.
+- Weitere API-Quellen ohne Browser, wo verfügbar (schneller & robuster als Recipes).
