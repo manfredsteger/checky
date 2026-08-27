@@ -64,6 +64,46 @@ interface EpisodeRow {
   isNew: boolean;
 }
 
+// Genre steht nicht in der Episodenliste, sondern nur auf der Serienseite
+// (`.../anime/stream/<slug>`, ohne Staffel/Episode-Suffix). Der `genres`-Block
+// dort listet Genres UND Sprachverfügbarkeit als gleichrangige "Tags"
+// (Ger/GerSub/EngSub) — die Sprach-Tags fliegen raus, wir zeigen die Sprache
+// ja schon separat aus der Episodenliste.
+const GENRE_SLUG_EXCLUDE = new Set(['ger', 'gersub', 'engsub', 'engdub', 'dub', 'sub']);
+
+function seriesBaseUrl(episodeUrl: string): string {
+  return episodeUrl.match(/^(https:\/\/aniworld\.to\/anime\/stream\/[^/]+)/)?.[1] || episodeUrl;
+}
+
+function parseGenres(html: string): string[] {
+  const section = html.match(/<div class="genres">([\s\S]*?)<\/ul>/)?.[1] || '';
+  const genres: string[] = [];
+  const re = /<a href="\/genre\/([a-z0-9-]+)" class="genreButton[^"]*"[^>]*>([^<]+)<\/a>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(section))) {
+    if (!GENRE_SLUG_EXCLUDE.has(m[1].toLowerCase())) genres.push(decodeEntities(m[2].trim()));
+  }
+  return genres;
+}
+
+// Eine Serienseite je eindeutiger Serie (nicht je Episode) — "One Piece"
+// taucht z.B. vierfach in der Episodenliste auf, soll aber nur einmal
+// abgerufen werden. Sequenziell mit kleiner Pause aus Rücksicht auf den
+// Server, ein einzelner Fehlschlag lässt nur diese eine Serie ohne Genres
+// da statt den ganzen Lauf scheitern zu lassen.
+async function fetchGenresBySeries(seriesUrls: string[]): Promise<Map<string, string[]>> {
+  const map = new Map<string, string[]>();
+  for (const url of seriesUrls) {
+    try {
+      map.set(url, parseGenres(await fetchHtml(url.replace(BASE, ''))));
+    } catch {
+      map.set(url, []);
+    }
+    await new Promise(r => setTimeout(r, 250));
+  }
+  return map;
+}
+
 // Eine Zeile der Liste: Anker (Titel+Episode+Datum), direkt gefolgt vom
 // Flaggen-Icon, optional gefolgt vom grünen "Neu!"-Badge.
 const ROW_RE = new RegExp(
@@ -126,12 +166,16 @@ export async function fetchAniworld(params: Record<string, any>): Promise<Record
 
   const matches = candidates.filter(r => matchesFilter(r.language, mode));
 
+  const uniqueSeriesUrls = Array.from(new Set(matches.map(r => seriesBaseUrl(r.url))));
+  const genresBySeries = await fetchGenresBySeries(uniqueSeriesUrls);
+
   return {
     count: matches.length,
     items: matches.map(r => ({
       title: `${r.title} — ${r.episode}`,
       url: r.url,
       languages: [r.language],
+      genres: genresBySeries.get(seriesBaseUrl(r.url)) || [],
       date: r.date,
       is_new: r.isNew,
     })),

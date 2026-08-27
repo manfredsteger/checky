@@ -28,17 +28,34 @@ function LanguageBadge({ lang }: { lang: string }) {
   );
 }
 
+// Höchstens 2 Genres in der Zeile — mehr würde die Titelspalte auf Kosten der
+// Lesbarkeit verdrängen; die volle Liste steckt trotzdem im Ergebnis (CSV/JSON).
+function GenreBadges({ genres }: { genres: string[] }) {
+  if (!genres.length) return null;
+  return (
+    <>
+      {genres.slice(0, 2).map(g => (
+        <span key={g} className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-violet-500/10 text-violet-300 shrink-0 hidden md:inline">
+          {g}
+        </span>
+      ))}
+    </>
+  );
+}
+
 // Eine Zeile innerhalb einer Item-Liste: Titel (verlinkt, falls url vorhanden),
 // Sprach-Badges, Datum rechtsbündig — statt eines rohen "Titel (Sprache)"-Texthaufens.
 function ItemRow({ item }: { item: any }) {
   const title = item && typeof item === 'object' ? (item.title ?? item.url ?? JSON.stringify(item)) : String(item);
   const url = item && typeof item === 'object' ? item.url : null;
   const languages: string[] = item && Array.isArray(item.languages) ? item.languages : [];
+  const genres: string[] = item && Array.isArray(item.genres) ? item.genres : [];
   const date = item && typeof item === 'object' ? item.date : null;
   const content = (
     <>
       <span className="flex-1 min-w-0 truncate text-sm text-white group-hover:text-emerald-300">{title}</span>
       {languages.map(l => <LanguageBadge key={l} lang={l} />)}
+      <GenreBadges genres={genres} />
       {date && <span className="text-[11px] text-[#6b7280] shrink-0 w-24 text-right hidden sm:inline">{date}</span>}
       {url && <ExternalLink className="w-3.5 h-3.5 text-[#4b5563] group-hover:text-emerald-400 shrink-0" />}
     </>
@@ -178,7 +195,9 @@ export default function AgentResults() {
     } else {
       const csvValue = (v: any): string => {
         if (v == null) return '';
-        if (Array.isArray(v)) return v.map(it => it && typeof it === 'object' ? `${it.title ?? ''} (${it.url ?? ''})` : String(it)).join(' | ');
+        if (Array.isArray(v)) return v.map(it => it && typeof it === 'object'
+          ? `${it.title ?? ''}${Array.isArray(it.genres) && it.genres.length ? ` [${it.genres.join(', ')}]` : ''} (${it.url ?? ''})`
+          : String(it)).join(' | ');
         if (typeof v === 'object') return JSON.stringify(v);
         return String(v);
       };
