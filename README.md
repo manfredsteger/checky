@@ -229,6 +229,7 @@ Aus `.env.example` kopieren und anpassen:
 |---|---|---|
 | `DB_URL` | PostgreSQL-Verbindung (für Docker vorkonfiguriert) | `postgres://checky:changeme@db:5432/checky` |
 | `CLAUDE_CODE_OAUTH_TOKEN` | Claude-Abo-Token für Recorder & Self-Healing | — |
+| `TMDB_API_KEY` | Optional: kostenloser v3-Key für TMDB-Bewertungen in `aniworld`/`topstreamfilm` | — (Provider laufen auch ohne, nur ohne Bewertung) |
 
 > **Kein `ANTHROPIC_API_KEY` setzen** — er hätte Vorrang und umginge den Abo-Token.
 
@@ -329,8 +330,11 @@ bekommt in der Oberfläche das Abzeichen **„API · `<id>`"** und braucht kein 
 | `kiwi` | `api.skypicker.com` (Kiwi.com, keyless) | Flugpreis, Airline, Stopps, Dauer — inkl. Direktflug-Filter |
 | `esyoil` | esyoil.com | Bundesweiter Heizölpreis €/100L |
 | `heizoel24` | heizoel24.de | Heizölpreis €/100L für eine konkrete PLZ + Liefermenge |
-| `aniworld` | aniworld.to/neue-episoden | Neue Episoden/Serien, gefiltert nach Sprache, inkl. Genre je Serie |
-| `topstreamfilm` | topstreamfilm.live/kinofilme | Neue Filme, gefiltert auf deutsche Tonspur, inkl. Genre + Datum je Film |
+| `aniworld` | aniworld.to/neue-episoden | Neue Episoden/Serien, gefiltert nach Sprache, inkl. Genre + TMDB-Bewertung je Serie |
+| `topstreamfilm` | topstreamfilm.live/kinofilme | Neue Filme, gefiltert auf deutsche Tonspur, inkl. Genre + Datum + TMDB-Bewertung je Film |
+
+`aniworld` und `topstreamfilm` zeigen zusätzlich eine **TMDB-Bewertung** (0–10, farbcodiert) je
+Eintrag, sofern `TMDB_API_KEY` gesetzt ist (siehe [Konfiguration](#konfiguration-env)).
 
 Eigenen Provider ergänzen: `apps/worker/src/providers/<id>.ts` mit einer `fetch<Id>(params)`-Funktion
 schreiben, in `providers/index.ts` registrieren, dazu einen Blueprint mit `kind: "api"` anlegen.
