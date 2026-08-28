@@ -330,6 +330,7 @@ bekommt in der Oberfläche das Abzeichen **„API · `<id>`"** und braucht kein 
 | `esyoil` | esyoil.com | Bundesweiter Heizölpreis €/100L |
 | `heizoel24` | heizoel24.de | Heizölpreis €/100L für eine konkrete PLZ + Liefermenge |
 | `aniworld` | aniworld.to/neue-episoden | Neue Episoden/Serien, gefiltert nach Sprache, inkl. Genre je Serie |
+| `topstreamfilm` | topstreamfilm.live/kinofilme | Neue Filme, gefiltert auf deutsche Tonspur, inkl. Genre + Datum je Film |
 
 Eigenen Provider ergänzen: `apps/worker/src/providers/<id>.ts` mit einer `fetch<Id>(params)`-Funktion
 schreiben, in `providers/index.ts` registrieren, dazu einen Blueprint mit `kind: "api"` anlegen.
