@@ -53,6 +53,7 @@ services:
     environment:
       - DB_URL=${DB_URL:-postgres://checky:changeme@db:5432/checky}
       - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN}
+      - TMDB_API_KEY=${TMDB_API_KEY:-}
       - SCREENSHOT_DIR=/data/screenshots
       # Anti-Detection: headful (Xvfb) + Stealth-Fingerprint/Evasions
       - HEADLESS=false

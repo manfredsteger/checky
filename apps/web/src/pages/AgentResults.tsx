@@ -3,7 +3,7 @@ import { api } from '../api/client';
 import { useParams, Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import { useMemo, useState } from 'react';
-import { Download, ExternalLink, ChevronDown, ChevronRight } from 'lucide-react';
+import { Download, ExternalLink, ChevronDown, ChevronRight, Star } from 'lucide-react';
 import type { EChartsOption } from 'echarts';
 import { resolveDisplay, toNumber } from '../lib/resultDisplay';
 import { ResultView } from '../ui/ResultView';
@@ -43,6 +43,25 @@ function GenreBadges({ genres }: { genres: string[] }) {
   );
 }
 
+// Farbcodiert nach TMDB-Bewertung (0-10) — genau der Blick, der einen
+// 3,5er-Film sofort als "eher nicht" erkennen lassen soll, statt erst den
+// Titel anzuklicken.
+function ratingStyle(rating: number): string {
+  if (rating >= 7) return 'bg-emerald-500/15 text-emerald-300';
+  if (rating >= 5) return 'bg-amber-500/15 text-amber-300';
+  return 'bg-red-500/15 text-red-300';
+}
+
+function RatingBadge({ rating }: { rating: number | null | undefined }) {
+  if (rating == null) return null;
+  return (
+    <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold shrink-0 ${ratingStyle(rating)}`}
+      title="TMDB-Bewertung">
+      <Star className="w-2.5 h-2.5 fill-current" />{rating.toFixed(1)}
+    </span>
+  );
+}
+
 // Eine Zeile innerhalb einer Item-Liste: Titel (verlinkt, falls url vorhanden),
 // Sprach-Badges, Datum rechtsbündig — statt eines rohen "Titel (Sprache)"-Texthaufens.
 function ItemRow({ item }: { item: any }) {
@@ -50,10 +69,12 @@ function ItemRow({ item }: { item: any }) {
   const url = item && typeof item === 'object' ? item.url : null;
   const languages: string[] = item && Array.isArray(item.languages) ? item.languages : [];
   const genres: string[] = item && Array.isArray(item.genres) ? item.genres : [];
+  const rating: number | null = item && typeof item.rating === 'number' ? item.rating : null;
   const date = item && typeof item === 'object' ? item.date : null;
   const content = (
     <>
       <span className="flex-1 min-w-0 truncate text-sm text-white group-hover:text-emerald-300">{title}</span>
+      <RatingBadge rating={rating} />
       {languages.map(l => <LanguageBadge key={l} lang={l} />)}
       <GenreBadges genres={genres} />
       {date && <span className="text-[11px] text-[#6b7280] shrink-0 w-24 text-right hidden sm:inline">{date}</span>}
@@ -196,7 +217,7 @@ export default function AgentResults() {
       const csvValue = (v: any): string => {
         if (v == null) return '';
         if (Array.isArray(v)) return v.map(it => it && typeof it === 'object'
-          ? `${it.title ?? ''}${Array.isArray(it.genres) && it.genres.length ? ` [${it.genres.join(', ')}]` : ''} (${it.url ?? ''})`
+          ? `${it.title ?? ''}${typeof it.rating === 'number' ? ` [${it.rating.toFixed(1)}★]` : ''}${Array.isArray(it.genres) && it.genres.length ? ` [${it.genres.join(', ')}]` : ''} (${it.url ?? ''})`
           : String(it)).join(' | ');
         if (typeof v === 'object') return JSON.stringify(v);
         return String(v);

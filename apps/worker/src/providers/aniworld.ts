@@ -17,6 +17,8 @@
 // Flaggen-<img data-src="…svg">, optional gefolgt vom "Neu!"-Badge) — dafür
 // reicht ein gezielter Regex.
 
+import { searchTvRating } from './tmdb.js';
+
 const BASE = 'https://aniworld.to';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36';
 
@@ -86,19 +88,27 @@ function parseGenres(html: string): string[] {
   return genres;
 }
 
+interface SeriesInfo {
+  genres: string[];
+  rating: number | null;
+}
+
 // Eine Serienseite je eindeutiger Serie (nicht je Episode) — "One Piece"
 // taucht z.B. vierfach in der Episodenliste auf, soll aber nur einmal
 // abgerufen werden. Sequenziell mit kleiner Pause aus Rücksicht auf den
 // Server, ein einzelner Fehlschlag lässt nur diese eine Serie ohne Genres
-// da statt den ganzen Lauf scheitern zu lassen.
-async function fetchGenresBySeries(seriesUrls: string[]): Promise<Map<string, string[]>> {
-  const map = new Map<string, string[]>();
-  for (const url of seriesUrls) {
+// da statt den ganzen Lauf scheitern zu lassen. Die TMDB-Bewertung hängt
+// sich an denselben Durchlauf dran (ein Zusatz-Request je Serie, kein
+// eigener Fan-out).
+async function fetchSeriesInfo(series: { url: string; title: string }[]): Promise<Map<string, SeriesInfo>> {
+  const map = new Map<string, SeriesInfo>();
+  for (const { url, title } of series) {
+    let genres: string[] = [];
     try {
-      map.set(url, parseGenres(await fetchHtml(url.replace(BASE, ''))));
-    } catch {
-      map.set(url, []);
-    }
+      genres = parseGenres(await fetchHtml(url.replace(BASE, '')));
+    } catch { /* Serie ohne Genres statt Lauf abzubrechen */ }
+    const tmdb = await searchTvRating(title);
+    map.set(url, { genres, rating: tmdb?.rating ?? null });
     await new Promise(r => setTimeout(r, 250));
   }
   return map;
@@ -166,8 +176,12 @@ export async function fetchAniworld(params: Record<string, any>): Promise<Record
 
   const matches = candidates.filter(r => matchesFilter(r.language, mode));
 
-  const uniqueSeriesUrls = Array.from(new Set(matches.map(r => seriesBaseUrl(r.url))));
-  const genresBySeries = await fetchGenresBySeries(uniqueSeriesUrls);
+  const uniqueSeries = new Map<string, string>(); // Serien-URL -> Titel (vom ersten Treffer dieser Serie)
+  for (const r of matches) {
+    const url = seriesBaseUrl(r.url);
+    if (!uniqueSeries.has(url)) uniqueSeries.set(url, r.title);
+  }
+  const seriesInfo = await fetchSeriesInfo(Array.from(uniqueSeries, ([url, title]) => ({ url, title })));
 
   return {
     count: matches.length,
@@ -175,7 +189,8 @@ export async function fetchAniworld(params: Record<string, any>): Promise<Record
       title: `${r.title} — ${r.episode}`,
       url: r.url,
       languages: [r.language],
-      genres: genresBySeries.get(seriesBaseUrl(r.url)) || [],
+      genres: seriesInfo.get(seriesBaseUrl(r.url))?.genres || [],
+      rating: seriesInfo.get(seriesBaseUrl(r.url))?.rating ?? null,
       date: r.date,
       is_new: r.isNew,
     })),

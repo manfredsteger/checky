@@ -45,12 +45,13 @@
   },
   "goal_template": "Neue Einträge auflisten, die die Sprachanforderung erfüllen.",
   "default_schedule": "0 9 * * *",
-  "version": 5,
+  "version": 6,
   "changelog": [
     "v1: Erststand — sprache/limit, count/items/newest_title/newest_url",
     "v2: Sprachfilter „Nur Dub, absolut keine Untertitel nötig\" — strenger als „Nur deutscher Dub\", schließt auch Titel mit gemischten Dub/Sub-Episoden aus",
     "v3: limit-Obergrenze auf 20 korrigiert — AniWorlds /neu-Seite listet nachweislich nie mehr, egal welcher Wert eingestellt wird (keine Pagination)",
     "v4: available_total ergänzt — AniWorld-Blueprint wechselt von /neu (20, Titel ohne Sprachangabe) auf /neue-episoden (150+ Episoden-Releases inkl. Sprache pro Zeile in einem Abruf)",
-    "v5: Einträge tragen jetzt genres[] (AniWorld-Blueprint holt Genres von der Serienseite, je eindeutige Serie einmal)"
+    "v5: Einträge tragen jetzt genres[] (AniWorld-Blueprint holt Genres von der Serienseite, je eindeutige Serie einmal)",
+    "v6: Einträge tragen jetzt rating (TMDB-Bewertung 0-10, sofern TMDB_API_KEY gesetzt und ein Treffer gefunden wurde, sonst null) — aniworld sucht in TMDBs Serien-Katalog, topstreamfilm im Film-Katalog"
   ]
 }

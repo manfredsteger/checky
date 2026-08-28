@@ -14,6 +14,8 @@
 // einfachen HTTP-GET aus (Cloudflare cached HTML, kein Anti-Bot-Check
 // getroffen, per curl verifiziert).
 
+import { searchMovieRating } from './tmdb.js';
+
 const BASE = 'https://www.topstreamfilm.live';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36';
 const PER_PAGE = 15; // beobachtete Archiv-Seitengröße
@@ -139,6 +141,15 @@ export async function fetchTopstreamfilm(params: Record<string, any>): Promise<R
 
   const matches = candidates.filter(r => matchesFilter(details.get(r.url)?.language || '', mode));
 
+  // TMDB-Bewertung erst NACH dem Sprachfilter abfragen — für die englischen
+  // Cam-Rips, die sowieso rausfliegen, muss kein Request laufen.
+  const ratings = new Map<string, number | null>();
+  for (const r of matches) {
+    const tmdb = await searchMovieRating(r.title, r.year);
+    ratings.set(r.url, tmdb?.rating ?? null);
+    await new Promise(res => setTimeout(res, 150));
+  }
+
   const items = matches.map(r => {
     const info = details.get(r.url);
     return {
@@ -146,6 +157,7 @@ export async function fetchTopstreamfilm(params: Record<string, any>): Promise<R
       url: r.url,
       languages: [info?.language || 'unbekannt'],
       genres: info?.genres || [],
+      rating: ratings.get(r.url) ?? null,
       date: info?.date || r.year,
     };
   });
