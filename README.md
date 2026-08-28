@@ -45,7 +45,7 @@ Checky beobachtet Websites in regelmäßigen Abständen und speichert strukturie
 Organisiert wird alles in einer klaren Hierarchie:
 
 ```
-Projekt "Flugsuche Beispielreise"   (wählt einen Tracking-Typ + zentrale Parameter)
+Projekt "Flugsuche Berlin–New York"   (wählt einen Tracking-Typ + zentrale Parameter)
  ├─ Agent  idealo.de/flug   · "günstigster Preis BER→JFK"   · täglich 07:00
  ├─ Agent  check24.de/flug  · gleiche Route                 · täglich 07:00
  └─ Agent  google.com/flights · gleiche Route               · 2×/Woche
@@ -154,10 +154,12 @@ make rebuild       # alle Images neu bauen & starten (DB bleibt)  — Alias: mak
 make complete      # rebuild + migrate + seed (nach größeren Updates)
 ```
 
-Optional das Flug-Projekt (17 Quellen) importieren:
+Optional ein Flugsuche-Projekt mit mehreren Quellen importieren (Route/Daten/Personenzahl
+sind persönlich, darum nicht im Repo — `checky-agents-seed.json` ist gitignored):
 
 ```bash
-make seed-flights               # importiert checky-agents-seed.json
+cp checky-agents-seed.json.example checky-agents-seed.json   # dann Route/Daten anpassen
+make seed-flights
 ```
 
 ## Make-Befehle

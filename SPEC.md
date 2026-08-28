@@ -4,7 +4,7 @@ Checky überwacht beliebige Websites in regelmäßigen Abständen — Flugsuchen
 
 Hierarchie:
 
-Projekt                     „Flugsuche Beispielreise"
+Projekt                     „Flugsuche Berlin–New York"
  ├─ Agent 1                 lufthansa.com · „Preis BER→JFK hin/rück im Mai"
  │   └─ Zeitplan            täglich 07:00 + 19:00 (±10 min Jitter)
  ├─ Agent 2                 flights.google.com · gleiche Route

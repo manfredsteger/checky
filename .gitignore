@@ -8,3 +8,5 @@ coverage/
 !.env.example
 data/
 backups/
+checky-agents-seed.json
+!checky-agents-seed.json.example
