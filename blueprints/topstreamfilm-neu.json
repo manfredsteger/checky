@@ -1,0 +1,13 @@
+{
+  "id": "topstreamfilm-neu",
+  "name": "TopStreamFilm – Neue Filme",
+  "manifest_id": "neuigkeiten",
+  "kind": "api",
+  "provider": "topstreamfilm",
+  "icon": "bell",
+  "description": "Neu hinzugefügte Filme auf topstreamfilm.live, gefiltert auf deutsche Tonspur (englischsprachige Cam-/TS-Rips vor dem deutschen Dub fliegen raus). Liefert je Treffer Genre und Hinzufüge-Datum von der Detailseite.",
+  "note": "Liest /kinofilme/ (echte Pagination via /kinofilme/page/N/, neueste zuerst, ~15 Einträge je Seite) für Titel/Link/Jahr, dann je Treffer die Detailseite für Sprache (Player-Tab-Beschriftung \"Deutsch - HD\"/\"English - TS\"), Genre (\"Genre:\"-Zeile) und exaktes Datum (itemprop=\"dateCreated\"). Kein Anti-Bot auf topstreamfilm.live festgestellt (einfacher HTTP-Abruf reicht, kein Playwright nötig). Der Sprachfilter-Dropdown ist vom AniWorld-Manifest geerbt (Dub/Sub-Unterscheidung existiert bei Filmen nicht) — jeder Wert außer \"Alle Sprachen\" verlangt hier schlicht deutsche Tonspur.",
+  "site": "https://www.topstreamfilm.live/kinofilme/",
+  "default_schedule": "0 9 * * *",
+  "version": 1
+}

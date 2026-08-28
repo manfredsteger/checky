@@ -2,6 +2,7 @@ import { fetchKiwi } from './kiwi.js';
 import { fetchEsyoil } from './esyoil.js';
 import { fetchHeizoel24 } from './heizoel24.js';
 import { fetchAniworld } from './aniworld.js';
+import { fetchTopstreamfilm } from './topstreamfilm.js';
 
 // Registry der API-Provider (kind:api). Neuer Provider = eine Zeile hier +
 // eine Adapter-Datei. Jeder Adapter bekommt die gemergten Agent-Parameter und
@@ -13,6 +14,7 @@ const registry: Record<string, ProviderFn> = {
   esyoil: fetchEsyoil,
   heizoel24: fetchHeizoel24,
   aniworld: fetchAniworld,
+  topstreamfilm: fetchTopstreamfilm,
 };
 
 export const PROVIDERS = Object.keys(registry);
