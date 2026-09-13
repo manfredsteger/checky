@@ -4,7 +4,7 @@ import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
 type ToastKind = 'success' | 'error' | 'info';
 interface Toast { id: number; kind: ToastKind; message: string }
 
-const ToastCtx = createContext<(kind: ToastKind, message: string) => void>(() => {});
+const ToastCtx = createContext<(kind: ToastKind, message: string, durationMs?: number) => void>(() => {});
 
 export function useToast() {
   return useContext(ToastCtx);
@@ -21,10 +21,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const remove = useCallback((id: number) => setToasts(t => t.filter(x => x.id !== id)), []);
 
-  const push = useCallback((kind: ToastKind, message: string) => {
+  const push = useCallback((kind: ToastKind, message: string, durationMs = 4500) => {
     const id = Date.now() + Math.random();
     setToasts(t => [...t, { id, kind, message }]);
-    setTimeout(() => remove(id), 4500);
+    setTimeout(() => remove(id), durationMs);
   }, [remove]);
 
   return (

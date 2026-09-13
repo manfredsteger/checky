@@ -2,8 +2,9 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { useParams, Link } from 'react-router-dom';
 import { format } from 'date-fns';
-import { useMemo, useState } from 'react';
-import { Download, ExternalLink, ChevronDown, ChevronRight, Star } from 'lucide-react';
+import { useMemo, useState, type MouseEvent } from 'react';
+import { Download, ExternalLink, ChevronDown, ChevronRight, Star, Copy, Check } from 'lucide-react';
+import { useToast } from '../ui/toast';
 import type { EChartsOption } from 'echarts';
 import { resolveDisplay, toNumber } from '../lib/resultDisplay';
 import { ResultView } from '../ui/ResultView';
@@ -64,6 +65,45 @@ function RatingBadge({ rating }: { rating: number | null | undefined }) {
 
 // Eine Zeile innerhalb einer Item-Liste: Titel (verlinkt, falls url vorhanden),
 // Sprach-Badges, Datum rechtsbündig — statt eines rohen "Titel (Sprache)"-Texthaufens.
+// Link in die Zwischenablage — mit Fallback für http-Zugriff aus dem LAN,
+// wo navigator.clipboard (secure context) nicht verfügbar ist.
+async function copyText(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(text); return true; }
+  } catch { /* fallback unten */ }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch { return false; }
+}
+
+// Kleiner Copy-Button links neben dem Extern-Symbol: kopiert nur die URL,
+// ohne den Zeilen-Link auszulösen. Kurzes Häkchen + dezenter Toast als Feedback.
+function CopyUrlButton({ url }: { url: string }) {
+  const toast = useToast();
+  const [done, setDone] = useState(false);
+  const onClick = async (e: MouseEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    const ok = await copyText(url);
+    if (ok) {
+      setDone(true); setTimeout(() => setDone(false), 1500);
+      toast('info', 'Link kopiert.', 1800);
+    } else {
+      toast('error', 'Kopieren fehlgeschlagen.');
+    }
+  };
+  return (
+    <button type="button" onClick={onClick} title="Link kopieren" aria-label="Link kopieren"
+      className="shrink-0 p-1 -m-1 rounded text-[#4b5563] hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors">
+      {done ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+    </button>
+  );
+}
+
 function ItemRow({ item }: { item: any }) {
   const title = item && typeof item === 'object' ? (item.title ?? item.url ?? JSON.stringify(item)) : String(item);
   const url = item && typeof item === 'object' ? item.url : null;
@@ -71,13 +111,16 @@ function ItemRow({ item }: { item: any }) {
   const genres: string[] = item && Array.isArray(item.genres) ? item.genres : [];
   const rating: number | null = item && typeof item.rating === 'number' ? item.rating : null;
   const date = item && typeof item === 'object' ? item.date : null;
+  const size: string | null = item && typeof item.size === 'string' && item.size ? item.size : null;
   const content = (
     <>
       <span className="flex-1 min-w-0 truncate text-sm text-white group-hover:text-emerald-300">{title}</span>
       <RatingBadge rating={rating} />
+      {size && <span className="px-1.5 py-0.5 rounded text-[10px] font-mono text-[#9ca3af] bg-[#1f2937]/70 shrink-0" title="Dateigröße">{size}</span>}
       {languages.map(l => <LanguageBadge key={l} lang={l} />)}
       <GenreBadges genres={genres} />
-      {date && <span className="text-[11px] text-[#6b7280] shrink-0 w-24 text-right hidden sm:inline">{date}</span>}
+      {date && <span className="text-[11px] text-[#6b7280] shrink-0 min-w-24 text-right hidden sm:inline whitespace-nowrap">{date}</span>}
+      {url && <CopyUrlButton url={url} />}
       {url && <ExternalLink className="w-3.5 h-3.5 text-[#4b5563] group-hover:text-emerald-400 shrink-0" />}
     </>
   );
