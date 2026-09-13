@@ -6,7 +6,7 @@ import { ClaudeAgentProvider } from './aiProvider.js';
 import { runRecorderSession, runAssistedRecorderSession } from './recorder.js';
 import { deriveParams } from './params.js';
 import { searchKeyOf, searchParamsOf } from '@checky/shared';
-import { enqueueNotification, processOutbox, runCleanup, checkRateLimit } from './notify.js';
+import { enqueueNotification, processOutbox, runCleanup, checkRateLimit, getSettings } from './notify.js';
 import { fetchProvider } from './providers/index.js';
 
 const dbUrl = process.env.DB_URL;
@@ -236,7 +236,8 @@ async function handleJob(job: any) {
   try {
     // 4b. API-Quelle (kind:api): Provider-Adapter statt Recipe/Browser.
     if (agent.provider) {
-      const resultData = await fetchProvider(agent.provider, agent.params || {});
+      const { sources } = await getSettings(pool!);
+      const resultData = await fetchProvider(agent.provider, agent.params || {}, { sources });
       // Dieselbe Plausibilitätsprüfung wie bei Browser-Recipes — ein
       // Provider-Ergebnis (z.B. Kiwi) ist sonst von der Direktflug-/
       // Schmerzgrenze-Prüfung ausgenommen, nur weil es keinen Playwright-Lauf

@@ -14,6 +14,7 @@ async function readSettings() {
     paused: map.paused === true,
     retention_days: typeof map.retention_days === 'number' ? map.retention_days : 30,
     notify: (map.notify && typeof map.notify === 'object') ? map.notify : {},
+    sources: (map.sources && typeof map.sources === 'object') ? map.sources : {},
   };
 }
 

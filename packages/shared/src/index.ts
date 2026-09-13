@@ -300,10 +300,22 @@ export const NotifyConfigSchema = z.object({
 });
 export type NotifyConfig = z.infer<typeof NotifyConfigSchema>;
 
+// Quellen-Zugänge: Sitzungs-Cookies o.ä., die ein Provider braucht, weil die
+// Quelle hinter einer Hürde liegt, die nur ein Mensch im Browser nimmt (z.B.
+// ein Bild-CAPTCHA). Der Nutzer löst sie einmal selbst und hinterlegt den
+// resultierenden Cookie hier — der Worker liest ihn je Lauf frisch aus der
+// DB, ein Neustart ist beim Erneuern nicht nötig.
+export const SourcesConfigSchema = z.object({
+  lovetorrent_cookie: z.string().optional(),       // Antibot-Cloud-Cookies von lovetorrent.net („veAnuQ=…; <30-Zeichen-Name>=<Wert>")
+  lovetorrent_user_agent: z.string().optional(),   // User-Agent des Browsers, in dem das Rätsel gelöst wurde (Cookie ist daran gebunden)
+});
+export type SourcesConfig = z.infer<typeof SourcesConfigSchema>;
+
 export const AppSettingsSchema = z.object({
   paused: z.boolean().default(false),
   retention_days: z.number().int().min(0).default(30),
   notify: NotifyConfigSchema.default({}),
+  sources: SourcesConfigSchema.default({}),
 });
 export type AppSettings = z.infer<typeof AppSettingsSchema>;
 
@@ -313,6 +325,7 @@ export const UpdateSettingsSchema = z.object({
   paused: z.boolean().optional(),
   retention_days: z.number().int().min(0).optional(),
   notify: NotifyConfigSchema.optional(),
+  sources: SourcesConfigSchema.optional(),
 });
 export type UpdateSettings = z.infer<typeof UpdateSettingsSchema>;
 

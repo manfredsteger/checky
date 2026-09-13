@@ -1,0 +1,60 @@
+{
+  "id": "torrents",
+  "name": "Neue Torrents",
+  "icon": "bell",
+  "description": "Beobachtet einen Torrent-Index auf frisch eingestellte Einträge — wahlweise die komplette Neuheiten-Liste, eine Tag-Seite oder per Titel-Filter — und listet sie mit Link, Größe und Datum auf.",
+  "params": [
+    {
+      "key": "tag",
+      "label": "Tag (optional)",
+      "type": "text",
+      "default": "",
+      "placeholder": "z. B. 1080p",
+      "help": "Leer = komplette Neuheiten-Liste. Mit Tag wird nur dessen Tag-Seite gelesen (Slug oder Anzeigename, z. B. „1080p\" oder „Ultra HD\"). Ein Agent je Tag ergibt eine eigene Liste."
+    },
+    {
+      "key": "suche",
+      "label": "Suchbegriff (optional)",
+      "type": "text",
+      "default": "",
+      "placeholder": "z. B. Anna Berg",
+      "help": "Titel-Filter über die geprüften neuesten Einträge: alle Wörter müssen im Titel vorkommen, Groß-/Kleinschreibung egal. Kein Server-Aufruf — die Site-Suche liefert keine Ergebnisse."
+    },
+    {
+      "key": "limit",
+      "label": "Geprüfte neueste Einträge",
+      "type": "number",
+      "default": 60,
+      "min": 30,
+      "max": 600,
+      "help": "Wie viele der neuesten Einträge (Startseite bzw. Tag-Seite, 30 je Seite) gelesen werden. Mit Suchbegriff lohnt ein höherer Wert, damit der Filter genug Material hat."
+    }
+  ],
+  "result_schema": {
+    "type": "object",
+    "properties": {
+      "count": { "type": "number" },
+      "items": { "type": "array" },
+      "newest_title": { "type": "string" },
+      "newest_url": { "type": "string" },
+      "checked_total": { "type": "number" },
+      "available_total": { "type": "number" }
+    },
+    "required": ["count", "items"]
+  },
+  "display": {
+    "headline": "count",
+    "chart_field": "count",
+    "unit": "Treffer",
+    "secondary": [
+      { "field": "newest_title", "label": "Neuester" },
+      { "field": "available_total", "label": "von insgesamt" }
+    ]
+  },
+  "goal_template": "Neue Einträge auflisten — optional eingeschränkt auf Tag „{{tag}}\" und Suchbegriff „{{suche}}\".",
+  "default_schedule": "0 */6 * * *",
+  "version": 1,
+  "changelog": [
+    "v1: Erststand — tag/suche/limit, count/items/newest_title/newest_url/checked_total/available_total; Einträge tragen title/url/size/date"
+  ]
+}

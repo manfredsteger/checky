@@ -11,6 +11,8 @@ export default function SettingsPage() {
   const [mxHome, setMxHome] = useState('');
   const [mxToken, setMxToken] = useState('');
   const [mxRoom, setMxRoom] = useState('');
+  const [ltCookie, setLtCookie] = useState('');
+  const [ltUa, setLtUa] = useState('');
 
   useEffect(() => {
     const s = settings.data;
@@ -20,6 +22,8 @@ export default function SettingsPage() {
       setMxHome(s.notify?.matrix_homeserver ?? '');
       setMxToken(s.notify?.matrix_token ?? '');
       setMxRoom(s.notify?.matrix_room ?? '');
+      setLtCookie(s.sources?.lovetorrent_cookie ?? '');
+      setLtUa(s.sources?.lovetorrent_user_agent ?? '');
     }
   }, [settings.data]);
 
@@ -106,6 +110,38 @@ export default function SettingsPage() {
             disabled={save.isPending}
             className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 px-5 py-2 rounded font-semibold text-sm">
             Ziele speichern
+          </button>
+        </section>
+
+        {/* Quellen-Zugänge */}
+        <section className="rounded-xl p-5 border border-[#1f2937] bg-[#111827] space-y-3">
+          <h2 className="font-semibold">Quellen-Zugänge</h2>
+          <p className="text-sm text-[#9ca3af]">
+            Manche Quellen liegen hinter einer Hürde, die nur ein Mensch im Browser nimmt. Einmal selbst lösen,
+            den entstandenen Cookie hier eintragen — der Worker nutzt ihn bei jedem Lauf, ohne Neustart.
+          </p>
+          <label className="block text-sm">LoveTorrent Antibot-Cookie
+            <input value={ltCookie} onChange={e => setLtCookie(e.target.value)} type="password" autoComplete="off"
+              placeholder="<30-stelliger Name>=<Wert> (aus den Browser-Cookies von lovetorrent.net)"
+              className="mt-1 w-full bg-[#0a0a0b] border border-[#374151] rounded px-3 py-2 text-sm font-mono" />
+          </label>
+          <label className="block text-sm">User-Agent des Browsers, in dem das Rätsel gelöst wurde
+            <input value={ltUa} onChange={e => setLtUa(e.target.value)} autoComplete="off"
+              placeholder="Mozilla/5.0 (Macintosh; …) Chrome/154.0.0.0 Safari/537.36"
+              className="mt-1 w-full bg-[#0a0a0b] border border-[#374151] rounded px-3 py-2 text-sm font-mono" />
+          </label>
+          <p className="text-xs text-[#6b7280]">
+            So kommst du dran: lovetorrent.net im Browser öffnen, das Bild-Rätsel lösen, dann in den Entwicklertools
+            unter Anwendung → Cookies den Eintrag mit dem 30-stelligen Namen als <span className="font-mono">Name=Wert</span> kopieren
+            (der kleine Begleit-Cookie „veAnuQ" wird automatisch ergänzt). Der Cookie gilt nur zusammen mit dem User-Agent
+            dieses Browsers — in der Adresszeile <span className="font-mono">chrome://version</span> öffnen und die Zeile „User-Agent" kopieren.
+            Läuft nach ca. 7 Tagen ab — der Agent meldet dann „Antibot-Cookie fehlt oder abgelaufen".
+          </p>
+          <button
+            onClick={() => save.mutate({ sources: { lovetorrent_cookie: ltCookie.trim(), lovetorrent_user_agent: ltUa.trim() } })}
+            disabled={save.isPending}
+            className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 px-5 py-2 rounded font-semibold text-sm">
+            Zugänge speichern
           </button>
         </section>
 

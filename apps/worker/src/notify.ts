@@ -14,6 +14,10 @@ export interface AppSettings {
     matrix_token?: string;
     matrix_room?: string;
   };
+  sources: {
+    lovetorrent_cookie?: string;
+    lovetorrent_user_agent?: string;
+  };
 }
 
 export async function getSettings(pool: Pool): Promise<AppSettings> {
@@ -24,6 +28,7 @@ export async function getSettings(pool: Pool): Promise<AppSettings> {
     paused: map.paused === true,
     retention_days: typeof map.retention_days === 'number' ? map.retention_days : 30,
     notify: (map.notify && typeof map.notify === 'object') ? map.notify : {},
+    sources: (map.sources && typeof map.sources === 'object') ? map.sources : {},
   };
 }
 
