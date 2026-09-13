@@ -334,7 +334,7 @@ bekommt in der Oberfläche das Abzeichen **„API · `<id>`"** und braucht kein 
 | `heizoel24` | heizoel24.de | Heizölpreis €/100L für eine konkrete PLZ + Liefermenge |
 | `aniworld` | aniworld.to/neue-episoden | Neue Episoden/Serien, gefiltert nach Sprache, inkl. Genre + TMDB-Bewertung je Serie |
 | `topstreamfilm` | topstreamfilm.live/kinofilme | Neue Filme, gefiltert auf deutsche Tonspur, inkl. Genre + Datum + TMDB-Bewertung je Film |
-| `lovetorrent` | lovetorrent.net (Startseite oder `/tags/<slug>/`) | Neu eingestellte Torrents mit Titel, Größe + Datum; optional Tag-Seite und Titel-Filter. Braucht den einmal selbst gelösten Antibot-Cookie (Einstellungen → Quellen-Zugänge) |
+| `lovetorrent` | lovetorrent.net (Startseite oder `/tags/<slug>/`) | Neu eingestellte Torrents mit Titel, Größe + Datum; optional Tag-Seite und Suchbegriff (prüft den vollen Detailseiten-Titel, z. B. Genre-Begriffe). Braucht den einmal selbst gelösten Antibot-Cookie (Einstellungen → Quellen-Zugänge) |
 
 `aniworld` und `topstreamfilm` zeigen zusätzlich eine **TMDB-Bewertung** (0–10, farbcodiert) je
 Eintrag, sofern `TMDB_API_KEY` gesetzt ist (siehe [Konfiguration](#konfiguration-env)).

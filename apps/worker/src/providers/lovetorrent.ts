@@ -34,6 +34,17 @@
 // Die Site-Suche (do=search) lieferte in allen getesteten Varianten (POST,
 // GET, mit/ohne Vollsuche-Felder) null Treffer — deshalb ist „suche" hier ein
 // Titel-Filter über die geprüften neuesten Einträge, kein Server-Aufruf.
+//
+// ABER: Die Liste zeigt nur einen gekürzten Titel („Beispieltitel"). Der volle
+// Titel steht erst auf der Detailseite im <title> — inklusive Studio, Genre-
+// Liste und Format, z.B. „[Studio] Beispieltitel (Szene
+// [Genre]) [2026 г., …, 1080p]".
+// Begriffe  tauchen NUR dort auf (nachgemessen 13.09.2026:
+// 5 von 60 neuesten Einträgen, 0 davon im Listen-Titel). Deshalb holt der
+// Filter je Kandidat die Detailseite und prüft den vollen Titel. Ein
+// prozessweiter Cache (URL → voller Titel; Titel ändern sich nicht) sorgt
+// dafür, dass Folge-Läufe nur die seit dem letzten Lauf neuen Einträge
+// nachladen — sonst wären es bei 600 Kandidaten 600 Abrufe alle 6 Stunden.
 
 import type { ProviderContext } from './index.js';
 
@@ -179,6 +190,37 @@ export function matchesSearch(title: string, search: string): boolean {
   return words.every(w => t.includes(w));
 }
 
+// Voller Titel aus der Detailseite: <title>… » Lovetorrent</title>. Das
+// Theme-Anhängsel und das bei manchen Einträgen angefügte „- free sex video"
+// sind kein Teil des Titels.
+export function parseFullTitle(html: string): string | null {
+  const raw = html.match(/<title>([\s\S]*?)<\/title>/)?.[1];
+  if (!raw) return null;
+  const t = decodeEntities(raw).replace(/\s*»\s*Lovetorrent\s*$/i, '').replace(/\s*-\s*free sex video\s*$/i, '').replace(/\s+/g, ' ').trim();
+  return t || null;
+}
+
+// URL → voller Titel. Lebt so lange wie der Worker-Prozess; ein Kaltstart
+// lädt einmal alle Kandidaten nach, danach nur noch die neuen.
+const fullTitleCache = new Map<string, string>();
+export const _fullTitleCacheForTests = fullTitleCache;
+
+async function fullTitleOf(url: string, cookie: string, ua: string): Promise<string | null> {
+  const cached = fullTitleCache.get(url);
+  if (cached !== undefined) return cached;
+  try {
+    const html = await fetchHtml(url.replace(BASE, ''), cookie, ua);
+    const t = parseFullTitle(html);
+    if (t) fullTitleCache.set(url, t);
+    return t;
+  } catch (e) {
+    if (e instanceof LovetorrentAuthError) throw e; // abgelaufener Cookie: sofort abbrechen, nicht 600× versuchen
+    return null;
+  } finally {
+    await new Promise(r => setTimeout(r, 250));
+  }
+}
+
 export async function fetchLovetorrent(params: Record<string, any>, ctx: ProviderContext): Promise<Record<string, any>> {
   const cookie = normalizeCookie(ctx?.sources?.lovetorrent_cookie);
   const ua = String(ctx?.sources?.lovetorrent_user_agent || '').trim() || DEFAULT_UA;
@@ -220,10 +262,21 @@ export async function fetchLovetorrent(params: Record<string, any>, ctx: Provide
   const seen = new Set<string>();
   const candidates = rows.filter(r => (seen.has(r.url) ? false : (seen.add(r.url), true))).slice(0, limit);
 
-  const matches = candidates.filter(r => matchesSearch(r.title, search));
+  // Ohne Suchbegriff reicht die Liste. Mit Suchbegriff entscheidet der volle
+  // Detailseiten-Titel (siehe Kopfkommentar); Treffer tragen dann diesen
+  // vollen Titel, weil er das Wesentliche (Studio, Genre, Format) erst nennt.
+  let detailsFetched = 0;
+  const matches: Array<Row & { fullTitle?: string }> = [];
+  for (const r of candidates) {
+    if (!search) { matches.push(r); continue; }
+    const before = fullTitleCache.has(r.url);
+    const full = await fullTitleOf(r.url, cookie, ua);
+    if (!before && full) detailsFetched++;
+    if (matchesSearch(full ? `${r.title} ${full}` : r.title, search)) matches.push({ ...r, fullTitle: full || undefined });
+  }
 
   const items = matches.map(r => ({
-    title: r.title,
+    title: r.fullTitle || r.title,
     url: r.url,
     size: r.size,
     date: r.date,
@@ -237,6 +290,6 @@ export async function fetchLovetorrent(params: Record<string, any>, ctx: Provide
     checked_total: candidates.length,
     ...(availableTotal != null ? { available_total: availableTotal } : {}),
     ...(slug ? { tag: slug } : {}),
-    ...(search ? { suche: search } : {}),
+    ...(search ? { suche: search, details_fetched: detailsFetched } : {}),
   };
 }

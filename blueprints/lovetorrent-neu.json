@@ -6,8 +6,8 @@
   "provider": "lovetorrent",
   "icon": "bell",
   "description": "Neu eingestellte Torrents auf lovetorrent.net — die „Most Recent\"-Liste, wahlweise eingeschränkt auf eine Tag-Seite oder per Titel-Filter. Liefert je Treffer Titel, Link, Größe und Einstelldatum.",
-  "note": "Liest / (bzw. /tags/<slug>/) mit Pagination via page/N/, 30 Einträge je Seite, neueste zuerst. Die Seite liegt hinter dem Bild-CAPTCHA „Antibot Cloud\" — einmal selbst im Browser lösen und den gesetzten Cookie (Name=Wert) unter Einstellungen → Quellen-Zugänge eintragen; hält ca. 7 Tage, danach meldet der Agent „Antibot-Cookie fehlt oder abgelaufen\". Die angezeigte Seed-Zahl der Seite ist per JavaScript zufällig erzeugt und wird ignoriert. Die Site-Suche lieferte in allen Varianten null Treffer, daher ist „Suchbegriff\" ein Titel-Filter über die geprüften Einträge.",
+  "note": "Liest / (bzw. /tags/<slug>/) mit Pagination via page/N/, 30 Einträge je Seite, neueste zuerst. Die Seite liegt hinter dem Bild-CAPTCHA „Antibot Cloud\" — einmal selbst im Browser lösen und den gesetzten Cookie (Name=Wert) unter Einstellungen → Quellen-Zugänge eintragen; hält ca. 7 Tage, danach meldet der Agent „Antibot-Cookie fehlt oder abgelaufen\". Die angezeigte Seed-Zahl der Seite ist per JavaScript zufällig erzeugt und wird ignoriert. Die Site-Suche lieferte in allen Varianten null Treffer, daher ist „Suchbegriff\" ein Filter über die geprüften Einträge — geprüft wird der VOLLE Titel der Detailseite (die Liste kürzt ihn; Genre-Begriffe  stehen nur dort), je neuem Eintrag ein Abruf, danach gecacht.",
   "site": "https://lovetorrent.net/",
   "default_schedule": "0 */6 * * *",
-  "version": 1
+  "version": 2
 }

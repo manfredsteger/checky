@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseListPage, normalizeDate, parseAvailableTotal, tagSlug, matchesSearch, normalizeCookie } from './lovetorrent.js';
+import { parseListPage, normalizeDate, parseAvailableTotal, tagSlug, matchesSearch, normalizeCookie, parseFullTitle } from './lovetorrent.js';
 
 // Markup nachgebaut aus der echten Startseite (Stand 13.09.2026): ein Eintrag
 // ist ein Anker mit Bild-Block (Größe in .info) und Info-Block (.title,
@@ -68,6 +68,14 @@ describe('lovetorrent provider', () => {
     expect(normalizeCookie(tok)).toBe(`veAnuQ=AbCdEfGhIjKlMnOpQrStUvWxYzAbCd; ${tok}`);
     expect(normalizeCookie(`Cookie: veAnuQ=AbCdEfGhIjKlMnOpQrStUvWxYzAbCd; ${tok};`)).toBe(`veAnuQ=AbCdEfGhIjKlMnOpQrStUvWxYzAbCd; ${tok}`);
     expect(normalizeCookie('')).toBe('');
+  });
+
+  it('liest den vollen Titel von der Detailseite ohne Theme-Anhängsel', () => {
+    expect(parseFullTitle('<head><title>[Studio] Beispieltitel (Szene [Genre]) [2026 г., 1080p] » Lovetorrent</title></head>'))
+      .toBe('[Studio] Beispieltitel (Szene [Genre]) [2026 г., 1080p]');
+    expect(parseFullTitle('<title>[Studio] Ein Titel - free sex video » Lovetorrent</title>')).toBe('[Studio] Ein Titel');
+    expect(parseFullTitle('<title>&#91;beispiel.com&#93; Beispiel Paket » Lovetorrent</title>')).toBe('[beispiel.com] Beispiel Paket');
+    expect(parseFullTitle('<html></html>')).toBeNull();
   });
 
   it('filtert Titel wortweise, unabhängig von Reihenfolge und Schreibweise', () => {

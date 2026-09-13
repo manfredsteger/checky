@@ -18,7 +18,7 @@
       "type": "text",
       "default": "",
       "placeholder": "z. B. Anna Berg",
-      "help": "Titel-Filter über die geprüften neuesten Einträge: alle Wörter müssen im Titel vorkommen, Groß-/Kleinschreibung egal. Kein Server-Aufruf — die Site-Suche liefert keine Ergebnisse."
+      "help": "Filter über die geprüften neuesten Einträge: alle Wörter müssen im vollen Titel vorkommen (Groß-/Kleinschreibung egal). Der volle Titel steht nur auf der Detailseite (Studio, Genre-Liste , Format …), deshalb wird sie je neuem Eintrag einmal nachgeladen — Treffer zeigen dann diesen vollen Titel. Die Site-Suche selbst liefert keine Ergebnisse."
     },
     {
       "key": "limit",
@@ -27,7 +27,7 @@
       "default": 60,
       "min": 30,
       "max": 600,
-      "help": "Wie viele der neuesten Einträge (Startseite bzw. Tag-Seite, 30 je Seite) gelesen werden. Mit Suchbegriff lohnt ein höherer Wert, damit der Filter genug Material hat."
+      "help": "Wie viele der neuesten Einträge (Startseite bzw. Tag-Seite, 30 je Seite) gelesen werden. Die Seite bekommt ca. 200 neue Einträge pro Tag — 300 decken also gut einen Tag ab, 600 etwa drei Tage. Mit Suchbegriff wird je Eintrag einmal die Detailseite geladen (danach gecacht)."
     }
   ],
   "result_schema": {
@@ -53,8 +53,9 @@
   },
   "goal_template": "Neue Einträge auflisten — optional eingeschränkt auf Tag „{{tag}}\" und Suchbegriff „{{suche}}\".",
   "default_schedule": "0 */6 * * *",
-  "version": 1,
+  "version": 2,
   "changelog": [
+    "v2: Suchbegriff prüft den vollen Detailseiten-Titel (Listen-Titel ist gekürzt, Genre-Begriffe  fehlen dort); Treffer tragen den vollen Titel; details_fetched im Ergebnis",
     "v1: Erststand — tag/suche/limit, count/items/newest_title/newest_url/checked_total/available_total; Einträge tragen title/url/size/date"
   ]
 }
