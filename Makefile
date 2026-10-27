@@ -10,7 +10,7 @@ FILE ?= backups/checky-$(shell date +%Y%m%d-%H%M%S).sql
 
 .PHONY: help init setup complete up down start stop restart prod dev ps status \
         build rebuild deploy deploy-web publish \
-        migrate db-push seed seed-flights db-shell shell-db db-dump db-restore wait-db disk \
+        migrate db-push seed seed-flights db-shell shell-db db-dump db-restore sichern rezepte rezepte-laden wait-db disk \
         reset reset-hard nuke prune clean \
         logs logs-api logs-worker run-once recorder test e2e lint
 
@@ -118,6 +118,16 @@ db-restore: ## Dump FILE=… zurückspielen (überschreibt Daten!)
 	@[ -n "$(FILE)" ] && [ -f "$(FILE)" ] || { echo "FILE=<pfad.sql> angeben (existierende Datei)"; exit 1; }
 	$(COMPOSE) exec -T db psql -U checky -d checky < "$(FILE)"
 	@echo "✓ Restore aus $(FILE)"
+
+sichern: ## Komplett-Sicherung + Rezepte in den privaten Ordner (CHECKY_PRIVAT_DIR, sonst ./privat)
+	node scripts/checky-privat.mjs sichern
+
+rezepte: ## Nur Rezepte schreiben (ein JSON je Projekt, ohne Ergebnisse/Zugangsdaten)
+	node scripts/checky-privat.mjs rezepte
+
+rezepte-laden: ## Rezept(e) einspielen: make rezepte-laden FILE="a.json b.json"
+	@[ -n "$(FILE)" ] || { echo "FILE=<rezept.json> angeben"; exit 1; }
+	node scripts/checky-privat.mjs laden $(FILE)
 
 wait-db: ## Warten, bis PostgreSQL Verbindungen annimmt
 	@echo "Warte auf PostgreSQL…"

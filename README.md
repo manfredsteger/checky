@@ -198,6 +198,8 @@ make seed-flights
 | `make db-shell` (`make shell-db`) | Interaktive PostgreSQL-Shell (`psql`) |
 | `make db-dump [FILE=…]` | DB nach `backups/checky-<zeit>.sql` sichern |
 | `make db-restore FILE=…` | Dump zurückspielen (überschreibt Daten) |
+| `make sichern` | DB-Dump + alle Rezepte in den **privaten Ordner** (siehe [Private Daten](#private-daten-sicherung--rezepte)) |
+| `make rezepte` / `make rezepte-laden FILE=…` | Projekte als Rezept-JSON schreiben / wieder einspielen |
 | `make wait-db` | Warten, bis PostgreSQL bereit ist |
 
 **Reset & Wartung**
@@ -339,6 +341,38 @@ bekommt in der Oberfläche das Abzeichen **„API · `<id>`"** und braucht kein 
 `aniworld` und `topstreamfilm` zeigen zusätzlich eine **TMDB-Bewertung** (0–10, farbcodiert) je
 Eintrag, sofern `TMDB_API_KEY` gesetzt ist (siehe [Konfiguration](#konfiguration-env)).
 
+### Medienbibliothek-Abgleich (Jellyfin · Emby · Plex)
+
+Neuigkeiten-Agenten gleichen jeden Treffer mit der eigenen Sammlung ab — unter
+**Einstellungen → Medienbibliothek** System wählen, Adresse (aus Sicht des Servers, im LAN meist
+`http://IP:Port`) und API-Schlüssel eintragen, „Verbindung testen", speichern. Jede Zeile bekommt
+dann ein Abzeichen, das direkt in die Bibliothek verlinkt:
+
+| Abzeichen | Bedeutung |
+|---|---|
+| `✓` | Eintrag ist da, Staffel lückenlos bis zur neuesten gelisteten Folge |
+| `+3` | Folge fehlt — insgesamt fehlen 3 Nummern bis zur neuesten (Tooltip nennt sie) |
+| `✓ +2` | diese Folge ist da, aber zwei ältere fehlen (Lücke) |
+| `+13 · Staffel fehlt` | Serie vorhanden, diese Staffel noch gar nicht |
+| `nicht in Bibliothek` | Serie/Film weder per TMDB-ID noch per Titel gefunden |
+
+Zuordnung läuft über die **TMDB-ID** (Jellyfin/Emby lesen sie aus Ordnernamen wie
+`Serie (2024) [tmdbid-12345]`, Plex über den TMDB-Agenten); ohne ID greift ein Titel-Vergleich, der im
+Tooltip als „nicht sicher" markiert ist. Der Titel-Vergleich kennt **alle Namen** eines Eintrags:
+Quell-Titel plus die bei TMDB gesehenen Namen (deutsch, englisch, Original) auf der einen Seite,
+Bibliotheksname, Originaltitel und bereinigter Ordner-/Dateiname auf der anderen — eine Serie, die
+AniWorld englisch nennt und Jellyfin deutsch führt, wird trotzdem gefunden. Die TMDB-ID selbst wird
+nicht blind vom populärsten Suchtreffer genommen, sondern vom Treffer mit exakt passendem Namen
+(deutsch oder englisch); sonst stünde z. B. für „That Time I Got Reincarnated as a Slime" das
+Spin-off „Die Schleim-Tagebücher" da. Die Staffelzählung der Quelle wird 1:1 übernommen. Über der
+Liste steht die Summe „N fehlen in der Bibliothek" (auch als Verlaufs-Feld `library_missing_total`).
+Bibliotheksfelder zählen **nicht** als Änderung des Ergebnisses — „geändert" heißt weiter „die Quelle
+hat etwas Neues", nicht „ich habe Folgen nachgeladen". Ist die Bibliothek nicht erreichbar, läuft der
+Agent trotzdem durch und zeigt einen Hinweis. Optionaler Benutzer (Jellyfin/Emby): dann zählen nur
+dessen sichtbare Bibliotheken. Selbstsignierte HTTPS-Zertifikate kennt der Server nicht — die
+http-Adresse mit IP eintragen und den HTTPS-Namen nur unter „Links im Browser". Der Plex-Adapter ist
+nach der Plex-API geschrieben, aber noch nicht gegen einen echten Server verifiziert.
+
 Eigenen Provider ergänzen: `apps/worker/src/providers/<id>.ts` mit einer `fetch<Id>(params, ctx)`-Funktion
 schreiben, in `providers/index.ts` registrieren, dazu einen Blueprint mit `kind: "api"` anlegen. `ctx.sources`
 enthält die unter **Einstellungen → Quellen-Zugänge** hinterlegten Zugänge (z. B. Cookies), die der Worker bei
@@ -462,6 +496,22 @@ blueprints/  Quellen         (git-versioniert, live-gemountet)
 - **Benachrichtigungen** — generischer Webhook (POST JSON bei Änderung/Fehler) und optional Matrix.
 - **Retention** — Screenshots/Läufe älter als N Tage werden täglich (03:00 UTC) aufgeräumt; der letzte Lauf je Agent bleibt.
 - **Rate-Limit** — max. Läufe/Tag/Domain (Setting `rate_limit_per_day`, Default 12); darüber `error='rate_limited'`.
+
+### Private Daten: Sicherung & Rezepte
+
+Projekte, Agenten, gelernte Schritte, Ergebnisse und Zugangsdaten liegen **nur in der Datenbank** — nie im
+Repo. Damit sie ein gelöschtes Docker-Volume überleben und sich nachnutzen lassen, schreibt
+`scripts/checky-privat.mjs` sie in einen Ordner **außerhalb** des Repos: `CHECKY_PRIVAT_DIR` in der `.env`
+(z. B. ein synchronisierter Privat-Ordner), ohne Angabe `./privat` (gitignored).
+
+| Ordner | Inhalt |
+|---|---|
+| `sicherung/checky-<zeit>.sql.gz` | kompletter DB-Dump **inkl. Zugangsdaten** (die letzten 14 bleiben) — Rückspielen: `gunzip -k <datei>` und dann `make db-restore FILE=<datei ohne .gz>` |
+| `rezepte/<projekt>.json` | je Projekt: Parameter, alle Agenten und ihre zuletzt gelernten Schritte — **ohne** Ergebnisse, Läufe und Einstellungen |
+
+Ein Rezept ist zum Nachnutzen gedacht: Datei kopieren, `project.name` und Parameter ändern,
+`make rezepte-laden FILE=kopie.json`. Das Laden legt fehlende Projekte und Agenten an und lässt
+vorhandene (gleicher Name) unangetastet; der Worker übernimmt die Zeitpläne innerhalb einer Minute.
 
 ## Troubleshooting
 

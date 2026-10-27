@@ -10,3 +10,4 @@ data/
 backups/
 checky-agents-seed.json
 !checky-agents-seed.json.example
+privat/
