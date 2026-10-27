@@ -3,7 +3,8 @@ import { api } from '../api/client';
 import { useParams, Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import { useMemo, useState, type MouseEvent } from 'react';
-import { Download, ExternalLink, ChevronDown, ChevronRight, Star, Copy, Check } from 'lucide-react';
+import { Download, ExternalLink, ChevronDown, ChevronRight, Star, Copy, Check, Library } from 'lucide-react';
+import type { LibraryInfo } from '@checky/shared';
 import { useToast } from '../ui/toast';
 import type { EChartsOption } from 'echarts';
 import { resolveDisplay, toNumber } from '../lib/resultDisplay';
@@ -63,6 +64,43 @@ function RatingBadge({ rating }: { rating: number | null | undefined }) {
   );
 }
 
+// Bibliotheks-Abgleich (Jellyfin/Emby/Plex): „✓" = dieser Eintrag ist da und
+// die Staffel lückenlos, „+3" = so viele Folgen fehlen bis zur neuesten
+// gelisteten, grau = Serie/Film gar nicht in der Sammlung. Der Badge ist ein
+// eigener Link in die Bibliothek (stopPropagation, damit nicht die Zeile
+// zur Quelle springt).
+function libraryText(lib: LibraryInfo): { label: string; cls: string; title: string } {
+  const range = (ns: number[]) => ns.length <= 6 ? ns.map(n => `E${String(n).padStart(2, '0')}`).join(', ') : `E${String(ns[0]).padStart(2, '0')}–E${String(ns[ns.length - 1]).padStart(2, '0')} (${ns.length})`;
+  const via = lib.match === 'title' ? ' · Zuordnung über Titel, nicht sicher' : '';
+  switch (lib.status) {
+    case 'present':
+      return lib.missing_count > 0
+        ? { label: `✓ +${lib.missing_count}`, cls: 'bg-amber-500/15 text-amber-300', title: `Diese Folge ist da, aber es fehlen ${range(lib.missing)}${via}` }
+        : { label: '✓', cls: 'bg-emerald-500/15 text-emerald-300', title: `In der Bibliothek${lib.have_until != null ? ` — Staffel komplett bis E${String(lib.have_until).padStart(2, '0')}` : ''}${via}` };
+    case 'missing':
+      return { label: `+${lib.missing_count}`, cls: 'bg-amber-500/15 text-amber-300', title: `Bibliothek hat die Staffel bis E${String(lib.have_until ?? 0).padStart(2, '0')} — fehlen ${range(lib.missing)}${via}` };
+    case 'season_missing':
+      return { label: `+${lib.missing_count} · Staffel fehlt`, cls: 'bg-amber-500/15 text-amber-300', title: `Serie ist da, diese Staffel aber noch gar nicht (${lib.missing_count} Folgen)${via}` };
+    case 'series_missing':
+      return { label: 'nicht in Bibliothek', cls: 'bg-[#1f2937] text-[#9ca3af]', title: 'Weder per TMDB-ID noch per Titel in der Bibliothek gefunden' };
+    default:
+      return { label: '?', cls: 'bg-[#1f2937] text-[#6b7280]', title: lib.note || 'Kein Abgleich möglich' };
+  }
+}
+
+function LibraryBadge({ lib }: { lib: LibraryInfo | null | undefined }) {
+  if (!lib || (lib.status === 'unknown' && lib.note?.startsWith('AniWorld-Film'))) return null;
+  const t = libraryText(lib);
+  const inner = (
+    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold shrink-0 whitespace-nowrap ${t.cls}`} title={t.title}>
+      <Library className="w-2.5 h-2.5" />{t.label}
+    </span>
+  );
+  return lib.url
+    ? <a href={lib.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="shrink-0 hover:opacity-80">{inner}</a>
+    : inner;
+}
+
 // Eine Zeile innerhalb einer Item-Liste: Titel (verlinkt, falls url vorhanden),
 // Sprach-Badges, Datum rechtsbündig — statt eines rohen "Titel (Sprache)"-Texthaufens.
 // Link in die Zwischenablage — mit Fallback für http-Zugriff aus dem LAN,
@@ -112,9 +150,11 @@ function ItemRow({ item }: { item: any }) {
   const rating: number | null = item && typeof item.rating === 'number' ? item.rating : null;
   const date = item && typeof item === 'object' ? item.date : null;
   const size: string | null = item && typeof item.size === 'string' && item.size ? item.size : null;
+  const lib: LibraryInfo | null = item && item.library && typeof item.library === 'object' ? item.library : null;
   const content = (
     <>
       <span className="flex-1 min-w-0 truncate text-sm text-white group-hover:text-emerald-300">{title}</span>
+      <LibraryBadge lib={lib} />
       <RatingBadge rating={rating} />
       {size && <span className="px-1.5 py-0.5 rounded text-[10px] font-mono text-[#9ca3af] bg-[#1f2937]/70 shrink-0" title="Dateigröße">{size}</span>}
       {languages.map(l => <LanguageBadge key={l} lang={l} />)}
@@ -260,7 +300,7 @@ export default function AgentResults() {
       const csvValue = (v: any): string => {
         if (v == null) return '';
         if (Array.isArray(v)) return v.map(it => it && typeof it === 'object'
-          ? `${it.title ?? ''}${typeof it.rating === 'number' ? ` [${it.rating.toFixed(1)}★]` : ''}${Array.isArray(it.genres) && it.genres.length ? ` [${it.genres.join(', ')}]` : ''} (${it.url ?? ''})`
+          ? `${it.title ?? ''}${typeof it.rating === 'number' ? ` [${it.rating.toFixed(1)}★]` : ''}${Array.isArray(it.genres) && it.genres.length ? ` [${it.genres.join(', ')}]` : ''}${it.library?.status === 'present' && !it.library.missing_count ? ' [Bibliothek: da]' : it.library?.missing_count ? ` [Bibliothek: +${it.library.missing_count} fehlen]` : it.library?.status === 'series_missing' ? ' [Bibliothek: fehlt]' : ''} (${it.url ?? ''})`
           : String(it)).join(' | ');
         if (typeof v === 'object') return JSON.stringify(v);
         return String(v);
@@ -338,9 +378,19 @@ export default function AgentResults() {
 
         {latest && Array.isArray((latest.data as any)?.items) && (
           <div className="bg-[#111827] border border-[#1f2937] rounded-xl p-5">
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between mb-2 gap-3 flex-wrap">
               <h2 className="font-semibold text-white">Einträge im letzten Lauf ({(latest.data as any).items.length})</h2>
-              <span className="text-[11px] text-[#6b7280]">Stand {format(new Date(latest.created_at), 'dd.MM.yy HH:mm')} Uhr</span>
+              <div className="flex items-center gap-3">
+                {(latest.data as any).library_error
+                  ? <span className="text-[11px] text-amber-300" title={String((latest.data as any).library_error)}>⚠ Bibliotheks-Abgleich fehlgeschlagen — {String((latest.data as any).library_error)}</span>
+                  : typeof (latest.data as any).library_missing_total === 'number' && (
+                    <span className="inline-flex items-center gap-1 text-[11px] text-[#9ca3af]" title="Abgleich mit deiner Medienbibliothek (Einstellungen → Medienbibliothek)">
+                      <Library className="w-3 h-3" />
+                      {(latest.data as any).library_missing_total === 0 ? 'Bibliothek vollständig' : `${(latest.data as any).library_missing_total} fehlen in der Bibliothek`}
+                    </span>
+                  )}
+                <span className="text-[11px] text-[#6b7280]">Stand {format(new Date(latest.created_at), 'dd.MM.yy HH:mm')} Uhr</span>
+              </div>
             </div>
             <div className="max-h-[32rem] overflow-y-auto -mx-2">
               <ItemsPreview items={(latest.data as any).items} />

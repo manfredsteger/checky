@@ -4,6 +4,7 @@ import { fetchHeizoel24 } from './heizoel24.js';
 import { fetchAniworld } from './aniworld.js';
 import { fetchTopstreamfilm } from './topstreamfilm.js';
 import { fetchLovetorrent } from './lovetorrent.js';
+import type { SourcesConfig } from '@checky/shared';
 
 // Registry der API-Provider (kind:api). Neuer Provider = eine Zeile hier +
 // eine Adapter-Datei. Jeder Adapter bekommt die gemergten Agent-Parameter und
@@ -13,7 +14,7 @@ import { fetchLovetorrent } from './lovetorrent.js';
 // (für Quellen-Zugänge wie hinterlegte Cookies). Provider, die ihn nicht
 // brauchen, ignorieren das zweite Argument einfach.
 export interface ProviderContext {
-  sources: { lovetorrent_cookie?: string; lovetorrent_user_agent?: string };
+  sources: SourcesConfig;
 }
 export type ProviderFn = (params: Record<string, any>, ctx: ProviderContext) => Promise<Record<string, any>>;
 

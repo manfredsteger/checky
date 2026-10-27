@@ -16,7 +16,9 @@
 
 import { searchMovieRating } from './tmdb.js';
 
-const BASE = 'https://www.topstreamfilm.live';
+// Domain-Umzug 2026-09-14: topstreamfilm.live leitet auf topstreamfilm.best um
+// (301, gleiche Seitenstruktur, Links tragen jetzt die neue Domain).
+const BASE = 'https://topstreamfilm.best';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36';
 const PER_PAGE = 15; // beobachtete Archiv-Seitengröße
 
@@ -44,7 +46,7 @@ interface ListRow {
 // Ein Listeneintrag: Anker mit Detail-Link, dann (nach dem Bild) Titel +
 // Jahr. Jeder Titel trägt als reines Theme-Anhängsel " – Der Film" — das ist
 // kein Teil des echten Titels und wird abgeschnitten.
-const ROW_RE = /<a href="(https:\/\/www\.topstreamfilm\.live\/kostenlos\/[^"]+)">\s*<div class="Image">[\s\S]*?<h3 class="Title">([^<]+)<\/h3>\s*<span class="Year">(\d{4})<\/span>/g;
+const ROW_RE = /<a href="(https:\/\/(?:www\.)?topstreamfilm\.[a-z]+\/kostenlos\/[^"]+)">\s*<div class="Image">[\s\S]*?<h3 class="Title">([^<]+)<\/h3>\s*<span class="Year">(\d{4})<\/span>/g;
 
 function parseListPage(html: string): ListRow[] {
   const rows: ListRow[] = [];
@@ -82,7 +84,7 @@ const GENRE_SLUG_EXCLUDE = new Set(['kinofilme', 'serien', 'demnachst']);
 function parseGenres(html: string): string[] {
   const section = html.match(/<strong>Genre:\s*<\/strong>([\s\S]*?)<\/li>/)?.[1] || '';
   const genres: string[] = [];
-  const re = /<a href="https:\/\/www\.topstreamfilm\.live\/([a-z0-9-]+)\/">([^<]+)<\/a>/gi;
+  const re = /<a href="https:\/\/(?:www\.)?topstreamfilm\.[a-z]+\/([a-z0-9-]+)\/">([^<]+)<\/a>/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(section))) {
     if (!GENRE_SLUG_EXCLUDE.has(m[1].toLowerCase())) genres.push(decodeEntities(m[2].trim()));
@@ -144,9 +146,13 @@ export async function fetchTopstreamfilm(params: Record<string, any>): Promise<R
   // TMDB-Bewertung erst NACH dem Sprachfilter abfragen — für die englischen
   // Cam-Rips, die sowieso rausfliegen, muss kein Request laufen.
   const ratings = new Map<string, number | null>();
+  const tmdbIds = new Map<string, number | null>();
+  const tmdbTitles = new Map<string, string[]>();
   for (const r of matches) {
     const tmdb = await searchMovieRating(r.title, r.year);
     ratings.set(r.url, tmdb?.rating ?? null);
+    tmdbIds.set(r.url, tmdb?.id ?? null);
+    tmdbTitles.set(r.url, tmdb?.titles ?? []);
     await new Promise(res => setTimeout(res, 150));
   }
 
@@ -159,6 +165,12 @@ export async function fetchTopstreamfilm(params: Record<string, any>): Promise<R
       genres: info?.genres || [],
       rating: ratings.get(r.url) ?? null,
       date: info?.date || r.year,
+      // Für den Bibliotheks-Abgleich: TMDB-ID + Jahr, Titel ohne Jahr-Suffix.
+      series_title: r.title,
+      year: Number(r.year) || null,
+      tmdb_id: tmdbIds.get(r.url) ?? null,
+      tmdb_titles: tmdbTitles.get(r.url) ?? [],
+      ref: { kind: 'movie' as const },
     };
   });
 

@@ -305,9 +305,23 @@ export type NotifyConfig = z.infer<typeof NotifyConfigSchema>;
 // ein Bild-CAPTCHA). Der Nutzer löst sie einmal selbst und hinterlegt den
 // resultierenden Cookie hier — der Worker liest ihn je Lauf frisch aus der
 // DB, ein Neustart ist beim Erneuern nicht nötig.
+// Medienbibliothek (Jellyfin/Emby/Plex): Neuigkeiten-Einträge werden gegen
+// die eigene Sammlung abgeglichen („schon da?" / „+N fehlen"). Leere URL oder
+// leerer Schlüssel = Abgleich aus. Die Adresse ist die, die Worker/API im LAN
+// erreichen (meist http://IP:Port); Links im Browser nutzen `public_url`.
+export const MediaLibraryConfigSchema = z.object({
+  kind: z.enum(['jellyfin', 'emby', 'plex']).default('jellyfin'),
+  url: z.string().default(''),
+  api_key: z.string().default(''),
+  public_url: z.string().optional(),
+  user: z.string().optional(),
+});
+export type MediaLibraryConfigInput = z.infer<typeof MediaLibraryConfigSchema>;
+
 export const SourcesConfigSchema = z.object({
   lovetorrent_cookie: z.string().optional(),       // Antibot-Cloud-Cookies von lovetorrent.net („veAnuQ=…; <30-Zeichen-Name>=<Wert>")
   lovetorrent_user_agent: z.string().optional(),   // User-Agent des Browsers, in dem das Rätsel gelöst wurde (Cookie ist daran gebunden)
+  media_library: MediaLibraryConfigSchema.optional(),
 });
 export type SourcesConfig = z.infer<typeof SourcesConfigSchema>;
 
@@ -383,3 +397,6 @@ export function describeSearchDiff(
   }
   return diff;
 }
+
+// --- Medienbibliothek-Abgleich (Jellyfin/Emby/Plex) --------------------------
+export * from './library/index.js';

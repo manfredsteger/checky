@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { UpdateSettingsSchema } from '@checky/shared';
+import { UpdateSettingsSchema, MediaLibraryConfigSchema, testLibraryConnection } from '@checky/shared';
 import { query } from '../db.js';
 import { asyncHandler } from '../lib/http.js';
 import { enqueue } from '../lib/boss.js';
@@ -31,6 +31,19 @@ settingsRouter.put('/api/settings', asyncHandler(async (req, res) => {
     );
   }
   res.json(await readSettings());
+}));
+
+// Medienbibliothek: Verbindung mit den (noch ungespeicherten) Formularwerten
+// prüfen — liefert Servername/Version und wie viele Serien/Filme eine TMDB-ID
+// tragen (nur die lassen sich sicher zuordnen).
+settingsRouter.post('/api/settings/media-library/test', asyncHandler(async (req, res) => {
+  const cfg = MediaLibraryConfigSchema.parse(req.body);
+  if (!cfg.url.trim() || !cfg.api_key.trim()) return res.status(400).json({ error: 'Adresse und API-Schlüssel sind nötig.' });
+  try {
+    res.json({ ok: true, ...(await testLibraryConnection(cfg)) });
+  } catch (e) {
+    res.status(502).json({ error: (e as Error).message });
+  }
 }));
 
 settingsRouter.post('/api/admin/cleanup', asyncHandler(async (_req, res) => {

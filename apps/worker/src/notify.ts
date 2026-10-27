@@ -1,3 +1,4 @@
+import type { SourcesConfig } from '@checky/shared';
 import type { Pool } from 'pg';
 import path from 'path';
 import fs from 'fs';
@@ -14,10 +15,7 @@ export interface AppSettings {
     matrix_token?: string;
     matrix_room?: string;
   };
-  sources: {
-    lovetorrent_cookie?: string;
-    lovetorrent_user_agent?: string;
-  };
+  sources: SourcesConfig;
 }
 
 export async function getSettings(pool: Pool): Promise<AppSettings> {

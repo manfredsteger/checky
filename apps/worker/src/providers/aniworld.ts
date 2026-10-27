@@ -18,6 +18,7 @@
 // reicht ein gezielter Regex.
 
 import { searchTvRating } from './tmdb.js';
+import { parseAniworldRef } from '@checky/shared';
 
 const BASE = 'https://aniworld.to';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36';
@@ -91,6 +92,8 @@ function parseGenres(html: string): string[] {
 interface SeriesInfo {
   genres: string[];
   rating: number | null;
+  tmdbId: number | null;
+  tmdbTitles: string[];
 }
 
 // Eine Serienseite je eindeutiger Serie (nicht je Episode) — "One Piece"
@@ -108,7 +111,7 @@ async function fetchSeriesInfo(series: { url: string; title: string }[]): Promis
       genres = parseGenres(await fetchHtml(url.replace(BASE, '')));
     } catch { /* Serie ohne Genres statt Lauf abzubrechen */ }
     const tmdb = await searchTvRating(title);
-    map.set(url, { genres, rating: tmdb?.rating ?? null });
+    map.set(url, { genres, rating: tmdb?.rating ?? null, tmdbId: tmdb?.id ?? null, tmdbTitles: tmdb?.titles ?? [] });
     await new Promise(r => setTimeout(r, 250));
   }
   return map;
@@ -193,6 +196,13 @@ export async function fetchAniworld(params: Record<string, any>): Promise<Record
       rating: seriesInfo.get(seriesBaseUrl(r.url))?.rating ?? null,
       date: r.date,
       is_new: r.isNew,
+      // Für den Bibliotheks-Abgleich: Serie + Staffel/Episode strukturiert
+      // (aus der URL, nicht aus dem Label) und die TMDB-ID der Serie.
+      series_title: r.title,
+      series_url: seriesBaseUrl(r.url),
+      tmdb_id: seriesInfo.get(seriesBaseUrl(r.url))?.tmdbId ?? null,
+      tmdb_titles: seriesInfo.get(seriesBaseUrl(r.url))?.tmdbTitles ?? [],
+      ref: parseAniworldRef(r.url),
     })),
     newest_title: matches[0]?.title ?? null,
     newest_url: matches[0]?.url ?? null,

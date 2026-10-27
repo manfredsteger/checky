@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
+import { LIBRARY_KINDS, type MediaLibraryConfigInput, type ConnectionTest } from '@checky/shared';
 
 export default function SettingsPage() {
   const qc = useQueryClient();
@@ -13,6 +14,8 @@ export default function SettingsPage() {
   const [mxRoom, setMxRoom] = useState('');
   const [ltCookie, setLtCookie] = useState('');
   const [ltUa, setLtUa] = useState('');
+  const [lib, setLib] = useState<MediaLibraryConfigInput>({ kind: 'jellyfin', url: '', api_key: '', public_url: '', user: '' });
+  const [libTest, setLibTest] = useState<{ ok: boolean; text: string } | null>(null);
 
   useEffect(() => {
     const s = settings.data;
@@ -24,6 +27,8 @@ export default function SettingsPage() {
       setMxRoom(s.notify?.matrix_room ?? '');
       setLtCookie(s.sources?.lovetorrent_cookie ?? '');
       setLtUa(s.sources?.lovetorrent_user_agent ?? '');
+      const ml = s.sources?.media_library;
+      if (ml) setLib({ kind: ml.kind || 'jellyfin', url: ml.url || '', api_key: ml.api_key || '', public_url: ml.public_url || '', user: ml.user || '' });
     }
   }, [settings.data]);
 
@@ -32,6 +37,20 @@ export default function SettingsPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
   });
   const cleanup = useMutation({ mutationFn: api.runCleanup });
+  const testLib = useMutation({
+    mutationFn: (cfg: MediaLibraryConfigInput) => api.testMediaLibrary(cfg),
+    onSuccess: (r: ConnectionTest) => setLibTest({ ok: true, text: `Verbunden mit „${r.name}" (${r.version}): ${r.series} Serien (${r.series_with_tmdb} mit TMDB-ID), ${r.movies} Filme (${r.movies_with_tmdb} mit TMDB-ID).` }),
+    onError: (e) => setLibTest({ ok: false, text: (e as Error).message }),
+  });
+  // Quellen-Zugänge werden als EIN Objekt gespeichert — beim Speichern eines
+  // Abschnitts die anderen Schlüssel mitnehmen, sonst löscht z.B. der
+  // LoveTorrent-Knopf die Bibliotheks-Einstellungen.
+  const saveSources = (patch: Record<string, any>) =>
+    save.mutate({ sources: { ...(settings.data?.sources || {}), ...patch } });
+  const libClean = (): MediaLibraryConfigInput => ({
+    kind: lib.kind, url: lib.url.trim(), api_key: lib.api_key.trim(),
+    public_url: lib.public_url?.trim() || undefined, user: lib.user?.trim() || undefined,
+  });
 
   const [importMsg, setImportMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const importBundle = useMutation({
@@ -138,11 +157,78 @@ export default function SettingsPage() {
             Läuft nach ca. 7 Tagen ab — der Agent meldet dann „Antibot-Cookie fehlt oder abgelaufen".
           </p>
           <button
-            onClick={() => save.mutate({ sources: { lovetorrent_cookie: ltCookie.trim(), lovetorrent_user_agent: ltUa.trim() } })}
+            onClick={() => saveSources({ lovetorrent_cookie: ltCookie.trim(), lovetorrent_user_agent: ltUa.trim() })}
             disabled={save.isPending}
             className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 px-5 py-2 rounded font-semibold text-sm">
             Zugänge speichern
           </button>
+        </section>
+
+        {/* Medienbibliothek */}
+        <section className="rounded-xl p-5 border border-[#1f2937] bg-[#111827] space-y-3">
+          <h2 className="font-semibold">Medienbibliothek (Jellyfin · Emby · Plex)</h2>
+          <p className="text-sm text-[#9ca3af]">
+            Neuigkeiten-Agenten (neue Episoden, neue Filme) gleichen jeden Treffer mit deiner eigenen Sammlung ab:
+            „✓ schon da" oder „+3" = so viele Folgen der Staffel fehlen noch. Zuordnung läuft über die TMDB-ID,
+            die Jellyfin/Emby aus Ordnernamen wie <span className="font-mono">Serie (2024) [tmdbid-12345]</span> liest,
+            als Fallback über den Titel.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <label className="block text-sm">System
+              <select value={lib.kind} onChange={e => setLib({ ...lib, kind: e.target.value as MediaLibraryConfigInput['kind'] })}
+                className="mt-1 w-full bg-[#0a0a0b] border border-[#374151] rounded px-3 py-2 text-sm">
+                {LIBRARY_KINDS.map(k => <option key={k.id} value={k.id}>{k.label}{k.experimental ? ' (experimentell)' : ''}</option>)}
+              </select>
+            </label>
+            <label className="block text-sm md:col-span-2">Adresse (aus Sicht des Servers, meist die LAN-IP)
+              <input value={lib.url} onChange={e => setLib({ ...lib, url: e.target.value })} autoComplete="off"
+                placeholder={lib.kind === 'plex' ? 'http://192.168.1.10:32400' : 'http://192.168.1.10:8096'}
+                className="mt-1 w-full bg-[#0a0a0b] border border-[#374151] rounded px-3 py-2 text-sm font-mono" />
+            </label>
+            <label className="block text-sm md:col-span-2">{lib.kind === 'plex' ? 'X-Plex-Token' : 'API-Schlüssel'}
+              <input value={lib.api_key} onChange={e => setLib({ ...lib, api_key: e.target.value })} type="password" autoComplete="off"
+                className="mt-1 w-full bg-[#0a0a0b] border border-[#374151] rounded px-3 py-2 text-sm font-mono" />
+            </label>
+            <label className="block text-sm">Benutzer (optional)
+              <input value={lib.user || ''} onChange={e => setLib({ ...lib, user: e.target.value })} autoComplete="off"
+                placeholder={lib.kind === 'plex' ? '— bei Plex nicht nötig' : 'nur dessen Bibliotheken zählen'}
+                disabled={lib.kind === 'plex'}
+                className="mt-1 w-full bg-[#0a0a0b] border border-[#374151] rounded px-3 py-2 text-sm disabled:opacity-40" />
+            </label>
+            <label className="block text-sm md:col-span-3">Adresse für Links im Browser (optional)
+              <input value={lib.public_url || ''} onChange={e => setLib({ ...lib, public_url: e.target.value })} autoComplete="off"
+                placeholder="https://jellyfin.example — falls du die Bibliothek über einen anderen Namen öffnest als der Server sie erreicht"
+                className="mt-1 w-full bg-[#0a0a0b] border border-[#374151] rounded px-3 py-2 text-sm font-mono" />
+            </label>
+          </div>
+          <p className="text-xs text-[#6b7280]">
+            {lib.kind === 'plex'
+              ? <>Token: in der Plex-Weboberfläche bei einem Medium „…" → „Info anzeigen" → „XML anzeigen", in der Adresse steht <span className="font-mono">X-Plex-Token=…</span>. Der Plex-Abgleich ist nach der Plex-API geschrieben, aber noch nicht gegen einen echten Server verifiziert.</>
+              : <>Schlüssel anlegen: {lib.kind === 'emby' ? 'Emby' : 'Jellyfin'}-Dashboard → Erweitert → API-Schlüssel → „+", Name z.&nbsp;B. „Checky". Ohne Benutzer gilt die Admin-Sicht auf alle Bibliotheken. Ein selbstsigniertes HTTPS-Zertifikat kennt der Server nicht — dann hier die http-Adresse mit IP eintragen und den HTTPS-Namen nur unter „Links im Browser".</>}
+          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={() => { setLibTest(null); testLib.mutate(libClean()); }}
+              disabled={testLib.isPending || !lib.url.trim() || !lib.api_key.trim()}
+              className="bg-[#1f2937] hover:bg-[#374151] disabled:opacity-50 px-5 py-2 rounded font-semibold text-sm">
+              {testLib.isPending ? 'Prüfe…' : 'Verbindung testen'}
+            </button>
+            <button
+              onClick={() => saveSources({ media_library: libClean() })}
+              disabled={save.isPending}
+              className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 px-5 py-2 rounded font-semibold text-sm">
+              Bibliothek speichern
+            </button>
+            {lib.url && (
+              <button
+                onClick={() => { setLib({ kind: lib.kind, url: '', api_key: '', public_url: '', user: '' }); saveSources({ media_library: { kind: lib.kind, url: '', api_key: '' } }); }}
+                disabled={save.isPending}
+                className="text-xs text-[#6b7280] hover:text-red-400">
+                Abgleich ausschalten
+              </button>
+            )}
+          </div>
+          {libTest && <p className={`text-xs ${libTest.ok ? 'text-emerald-400' : 'text-red-400'}`}>{libTest.text}</p>}
         </section>
 
         {/* Retention */}

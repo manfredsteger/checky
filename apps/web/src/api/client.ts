@@ -1,4 +1,4 @@
-import { Project, Agent, Run, Result, CreateProject, UpdateProject, CreateAgent, UpdateAgent, RecorderSession, AppSettings, UpdateSettings, Manifest, Blueprint, CheckyBundle, Activity } from '@checky/shared';
+import { Project, Agent, Run, Result, CreateProject, UpdateProject, CreateAgent, UpdateAgent, RecorderSession, AppSettings, UpdateSettings, Manifest, Blueprint, CheckyBundle, Activity, MediaLibraryConfigInput, ConnectionTest } from '@checky/shared';
 
 const baseUrl = '/api';
 
@@ -72,4 +72,5 @@ export const api = {
   getSettings: () => fetcher<AppSettings>('/settings'),
   updateSettings: (data: UpdateSettings) => fetcher<AppSettings>('/settings', { method: 'PUT', body: JSON.stringify(data) }),
   runCleanup: () => fetcher<{ ok: boolean }>('/admin/cleanup', { method: 'POST' }),
+  testMediaLibrary: (cfg: MediaLibraryConfigInput) => fetcher<{ ok: boolean } & ConnectionTest>('/settings/media-library/test', { method: 'POST', body: JSON.stringify(cfg) }),
 };

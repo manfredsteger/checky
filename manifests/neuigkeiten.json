@@ -8,7 +8,13 @@
       "key": "sprache",
       "label": "Sprachfilter",
       "type": "select",
-      "options": ["Deutsch (Dub oder Sub)", "Nur deutscher Dub", "Nur Dub, absolut keine Untertitel nötig", "Nur deutsche Untertitel", "Alle Sprachen"],
+      "options": [
+        "Deutsch (Dub oder Sub)",
+        "Nur deutscher Dub",
+        "Nur Dub, absolut keine Untertitel nötig",
+        "Nur deutsche Untertitel",
+        "Alle Sprachen"
+      ],
       "default": "Deutsch (Dub oder Sub)",
       "help": "„Nur Dub, absolut keine Untertitel nötig\" ist am strengsten: schließt Titel aus, bei denen irgendeine Episode nur mit Untertiteln läuft — auch wenn andere Episoden schon Dub haben."
     },
@@ -25,33 +31,77 @@
   "result_schema": {
     "type": "object",
     "properties": {
-      "count": { "type": "number" },
-      "items": { "type": "array" },
-      "newest_title": { "type": "string" },
-      "newest_url": { "type": "string" },
-      "checked_total": { "type": "number" },
-      "available_total": { "type": "number" }
+      "count": {
+        "type": "number"
+      },
+      "items": {
+        "type": "array"
+      },
+      "newest_title": {
+        "type": "string"
+      },
+      "newest_url": {
+        "type": "string"
+      },
+      "checked_total": {
+        "type": "number"
+      },
+      "available_total": {
+        "type": "number"
+      },
+      "library_checked": {
+        "type": "number"
+      },
+      "library_missing_total": {
+        "type": [
+          "number",
+          "null"
+        ]
+      },
+      "library_error": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "library_kind": {
+        "type": "string"
+      }
     },
-    "required": ["count", "items"]
+    "required": [
+      "count",
+      "items"
+    ]
   },
   "display": {
     "headline": "count",
     "chart_field": "count",
     "unit": "Treffer",
     "secondary": [
-      { "field": "newest_title", "label": "Neuester" },
-      { "field": "available_total", "label": "von insgesamt" }
+      {
+        "field": "newest_title",
+        "label": "Neuester"
+      },
+      {
+        "field": "available_total",
+        "label": "von insgesamt"
+      },
+      {
+        "field": "library_missing_total",
+        "label": "fehlen in der Bibliothek"
+      }
     ]
   },
   "goal_template": "Neue Einträge auflisten, die die Sprachanforderung erfüllen.",
   "default_schedule": "0 9 * * *",
-  "version": 6,
+  "version": 7,
   "changelog": [
     "v1: Erststand — sprache/limit, count/items/newest_title/newest_url",
     "v2: Sprachfilter „Nur Dub, absolut keine Untertitel nötig\" — strenger als „Nur deutscher Dub\", schließt auch Titel mit gemischten Dub/Sub-Episoden aus",
     "v3: limit-Obergrenze auf 20 korrigiert — AniWorlds /neu-Seite listet nachweislich nie mehr, egal welcher Wert eingestellt wird (keine Pagination)",
     "v4: available_total ergänzt — AniWorld-Blueprint wechselt von /neu (20, Titel ohne Sprachangabe) auf /neue-episoden (150+ Episoden-Releases inkl. Sprache pro Zeile in einem Abruf)",
     "v5: Einträge tragen jetzt genres[] (AniWorld-Blueprint holt Genres von der Serienseite, je eindeutige Serie einmal)",
-    "v6: Einträge tragen jetzt rating (TMDB-Bewertung 0-10, sofern TMDB_API_KEY gesetzt und ein Treffer gefunden wurde, sonst null) — aniworld sucht in TMDBs Serien-Katalog, topstreamfilm im Film-Katalog"
+    "v6: Einträge tragen jetzt rating (TMDB-Bewertung 0-10, sofern TMDB_API_KEY gesetzt und ein Treffer gefunden wurde, sonst null) — aniworld sucht in TMDBs Serien-Katalog, topstreamfilm im Film-Katalog",
+    "v7: Bibliotheks-Abgleich (Jellyfin/Emby/Plex, Einstellungen → Medienbibliothek) — Einträge tragen ref (Staffel/Episode bzw. Film), series_title, tmdb_id und library {status, have_until, missing[], missing_count, url}; Top-Level library_checked/library_missing_total/library_error/library_kind. Bibliotheksfelder zählen NICHT als Änderung des Ergebnisses."
   ]
 }
