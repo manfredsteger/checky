@@ -182,7 +182,7 @@ export default function SettingsPage() {
             </label>
             <label className="block text-sm md:col-span-2">Adresse (aus Sicht des Servers, meist die LAN-IP)
               <input value={lib.url} onChange={e => setLib({ ...lib, url: e.target.value })} autoComplete="off"
-                placeholder={lib.kind === 'plex' ? 'http://192.168.1.10:32400' : 'http://192.168.1.10:8096'}
+                placeholder={lib.kind === 'plex' ? 'http://192.168.0.10:32400' : 'http://192.168.0.10:8096'}
                 className="mt-1 w-full bg-[#0a0a0b] border border-[#374151] rounded px-3 py-2 text-sm font-mono" />
             </label>
             <label className="block text-sm md:col-span-2">{lib.kind === 'plex' ? 'X-Plex-Token' : 'API-Schlüssel'}

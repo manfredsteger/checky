@@ -45,7 +45,6 @@ describe('Recipe Player Executor', () => {
       getByTestId: vi.fn().mockReturnValue(mockLocator),
       route: vi.fn(),
       on: vi.fn(),
-      mainFrame: vi.fn(),
       screenshot: vi.fn(),
       waitForTimeout: vi.fn(),
       keyboard: { press: vi.fn(), type: vi.fn() },
