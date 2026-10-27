@@ -2,6 +2,9 @@ services:
   db:
     restart: unless-stopped
     image: postgres:16-alpine
+    # Deckel, damit Checky den Rechner nie ganz belegt (andere Dienste und
+    # CI-Läufe teilen sich denselben Mac).
+    cpus: '1.5'
     environment:
       POSTGRES_USER: checky
       POSTGRES_PASSWORD: changeme
@@ -50,6 +53,13 @@ services:
       context: .
       target: worker
     shm_size: '1gb'
+    # init: echter PID 1 (tini) räumt beendete Chromium-Kindprozesse ab.
+    # Ohne ihn sammelten sich Hunderte Zombie-Prozesse (>1100 PIDs).
+    init: true
+    # Harte Obergrenze: höchstens 3 Kerne / 4 GB, egal wie viele Läufe anstehen.
+    cpus: '3'
+    mem_limit: 4g
+    pids_limit: 1024
     environment:
       - DB_URL=${DB_URL:-postgres://checky:changeme@db:5432/checky}
       - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN}
@@ -58,6 +68,8 @@ services:
       # Anti-Detection: headful (Xvfb) + Stealth-Fingerprint/Evasions
       - HEADLESS=false
       - STEALTH=true
+      # Gleichzeitige Browser-Läufe (alle Quellen zusammen)
+      - RUN_CONCURRENCY=${RUN_CONCURRENCY:-3}
     volumes:
       - ./data/screenshots:/data/screenshots
     depends_on:

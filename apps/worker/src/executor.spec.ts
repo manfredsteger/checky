@@ -44,6 +44,8 @@ describe('Recipe Player Executor', () => {
       getByPlaceholder: vi.fn().mockReturnValue(mockLocator),
       getByTestId: vi.fn().mockReturnValue(mockLocator),
       route: vi.fn(),
+      on: vi.fn(),
+      mainFrame: vi.fn(),
       screenshot: vi.fn(),
       waitForTimeout: vi.fn(),
       keyboard: { press: vi.fn(), type: vi.fn() },
@@ -163,7 +165,7 @@ describe('Recipe Player Executor', () => {
     const result = await executeRecipe(agent, recipe, 'run-127');
     
     expect(result.error).toBeUndefined();
-    expect(result.resultData).toEqual({ field1: 'Mock Text' });
+    expect(result.resultData).toEqual({ field1: 'Mock Text', _url: 'https://example.com/ergebnis' });
     expect(mockPage.locator).toHaveBeenCalledWith('.price');
     expect(mockLocator.textContent).toHaveBeenCalled();
   });

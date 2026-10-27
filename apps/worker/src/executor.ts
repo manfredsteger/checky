@@ -229,8 +229,21 @@ export async function executeRecipe(
   let context: BrowserContext | null = null;
   let page: Page | null = null;
   
+  // Harte Obergrenze für den ganzen Lauf. Hängt eine Seite (z.B. ein Lauf
+  // stand fast 2 Stunden auf „läuft"), schließt der Wächter den Browser:
+  // alle offenen Playwright-Aufrufe werfen dann, der Lauf endet sauber als
+  // Fehler und gibt seinen Platz frei. Bleibt unter dem pg-boss-Ablauf (15 min),
+  // damit derselbe Job nie doppelt läuft.
+  const maxRunMs = Math.max(60, Number(process.env.RUN_MAX_SECONDS ?? 600)) * 1000;
+  let watchdogFired = false;
+  const watchdog = setTimeout(() => {
+    watchdogFired = true;
+    Promise.resolve(browser?.close()).catch(() => {});
+  }, maxRunMs);
+
   try {
     browser = await launchBrowser();
+    if (watchdogFired) throw new Error('Lauf-Zeitgrenze erreicht');
     context = await createContext(browser, { viewport: { width: 1440, height: 900 } });
 
     // Global Timeout of 120s
@@ -239,17 +252,22 @@ export async function executeRecipe(
     
     page = await createPage(browser, context);
 
-    // Guardrail: Domain-Allowlist NUR für Seitenwechsel (Dokument-Navigationen).
-    // Subressourcen (CDN-Skripte, Fonts, XHR zu API-Hosts) müssen durch — sonst
-    // bleibt die Seite kaputt bzw. lädt ihre Ergebnisse nie nach, und das
-    // Blockieren aller Drittanbieter ist selbst ein Bot-Erkennungsmerkmal.
+    // Guardrail: Domain-Allowlist für Seitenwechsel des Hauptfensters.
+    // Bewusst OHNE page.route(): sobald Playwright Anfragen abfängt, liefern
+    // manche Seiten (idealo seit 25.10.2026) nur noch eine leere Hülle — auch
+    // wenn jede Anfrage durchgelassen wird. Darum nur beobachten und den Lauf
+    // abbrechen, sobald das Hauptfenster die erlaubte Domain verlässt.
     const urlObj = new URL(agent.site);
     const allowedDomain = urlObj.hostname;
-    await page.route('**/*', route => {
-      const req = route.request();
-      if (req.resourceType() !== 'document' || !req.isNavigationRequest()) return route.continue();
-      isAllowedUrl(req.url(), allowedDomain) ? route.continue() : route.abort();
+    let offDomainUrl: string | null = null;
+    page.on('framenavigated', frame => {
+      if (frame !== page!.mainFrame()) return;
+      const u = frame.url();
+      if (/^https?:/.test(u) && !isAllowedUrl(u, allowedDomain)) offDomainUrl = u;
     });
+    const assertOnDomain = () => {
+      if (offDomainUrl) throw new Error(`Guardrail: Seite hat die erlaubte Domain verlassen (${offDomainUrl})`);
+    };
 
     // KI-Fallback: Haupttext der Seite (max 15k Zeichen) -> extractJson gegen result_schema.
     const runAiJson = async () => {
@@ -264,8 +282,8 @@ export async function executeRecipe(
       Object.assign(resultData, parsed.data as Record<string, any>);
       // Deutlich machen, dass dieser Wert GESCHÄTZT ist. Der Notnagel liest den
       // Seitentext und rät — greift der Selektor nicht mehr, kommt dabei auch
-      // mal eine plausibel aussehende, aber völlig falsche Zahl heraus (einmal
-      // 59 € für einen Langstreckenflug). Ungekennzeichnet wäre das schlimmer
+      // mal eine plausibel aussehende, aber völlig falsche Zahl heraus (z.B.
+      // 59 € für einen Langstreckenflug mit vier Personen). Ungekennzeichnet wäre das schlimmer
       // als gar kein Wert.
       resultData._ai = true;
     };
@@ -429,7 +447,9 @@ export async function executeRecipe(
 
         try {
           await runAction(step);
+          assertOnDomain();
         } catch (err: any) {
+          if (offDomainUrl) throw err;
           // Selbstheilung: max. 1x pro Run, nur für einzelne Selektor-Schritte
           const isSelectorStep = step.action === 'click' || step.action === 'fill' || step.action === 'waitFor';
           if (aiProvider && !healed && isSelectorStep && step.selector) {
@@ -489,12 +509,17 @@ export async function executeRecipe(
     return {
       resultData,
       stepsLog,
-      error: error.message || String(error),
+      error: watchdogFired
+        ? `Abgebrochen: Lauf dauerte länger als ${Math.round(maxRunMs / 1000)} s`
+        : (error.message || String(error)),
       screenshotBefore: fs.existsSync(screenshotBeforePath) ? `/data/screenshots/${runId}-before.png` : undefined,
       screenshotAfter: fs.existsSync(screenshotAfterPath) ? `/data/screenshots/${runId}-after.png` : undefined
     };
   } finally {
-    if (context) await context.close();
-    if (browser) await browser.close();
+    clearTimeout(watchdog);
+    // Jeder Schritt einzeln abgesichert: wirft context.close(), muss der
+    // Browser trotzdem zu — sonst bleibt ein Chromium dauerhaft liegen.
+    try { if (context) await context.close(); } catch { /* weiter zum Browser */ }
+    try { if (browser) await browser.close(); } catch { /* schon zu */ }
   }
 }

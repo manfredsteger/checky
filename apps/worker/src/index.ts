@@ -5,7 +5,7 @@ import { executeRecipe, applyPlausibilityChecks } from './executor.js';
 import { ClaudeAgentProvider } from './aiProvider.js';
 import { runRecorderSession, runAssistedRecorderSession } from './recorder.js';
 import { deriveParams } from './params.js';
-import { searchKeyOf, searchParamsOf } from '@checky/shared';
+import { searchKeyOf, searchParamsOf, canonicalJson, hashableView, enrichWithLibrary, isLibraryConfigured } from '@checky/shared';
 import { enqueueNotification, processOutbox, runCleanup, checkRateLimit, getSettings } from './notify.js';
 import { fetchProvider } from './providers/index.js';
 
@@ -61,7 +61,9 @@ async function start() {
   // Mehrere Läufe gleichzeitig. Ein Browser-Lauf dauert 30-90 s; wird nach einer
   // Parameteränderung ein ganzes Projekt neu vermessen, stehen sonst alle
   // Agenten minutenlang auf „wartet auf Worker". Der Deckel bleibt niedrig,
-  // weil jeder Lauf ein eigenes Chromium startet (Arbeitsspeicher!).
+  // weil jeder Lauf ein eigenes Chromium startet (Arbeitsspeicher + CPU).
+  // Diese Grenze gilt für ALLE Läufe: auch die Zeitplan-Läufe landen in
+  // dieser einen Warteschlange (siehe updateSchedules).
   const CONCURRENCY = Math.max(1, Math.min(Number(process.env.RUN_CONCURRENCY ?? 3), 6));
   // Bewusst N EIGENSTÄNDIGE Arbeiter statt eines mit batchSize N: bei einem
   // Stapel holt pg-boss erst dann Nachschub, wenn der GANZE Stapel fertig ist —
@@ -93,64 +95,88 @@ async function start() {
   // Outbox-Processor: fällige Benachrichtigungen zustellen (alle 10s).
   setInterval(() => { processOutbox(pool!).catch(err => console.error('[Worker] Outbox-Fehler:', err)); }, 10000);
 
-  // pg-boss v12: Queues müssen existieren, Wildcard-work gibt es nicht.
-  // -> Pro Agent eine Queue mit eigenem Worker, registriert in updateSchedules().
+  // Früher hatte jeder Agent eine eigene Queue mit eigenem Arbeiter. Folge:
+  // die Grenze oben galt nur für manuelle Läufe, zur vollen Stunde starteten
+  // bis zu 9 Chromium gleichzeitig (Worker >1400 % CPU), und ~150 Queues
+  // fragten die Datenbank alle 2 s ab. Jetzt hängen alle Zeitpläne an der
+  // gemeinsamen Queue (je Agent ein Zeitplan-Schlüssel).
+  await migrateLegacyQueues();
   await updateSchedules();
   // Agenten alle 60s neu abgleichen (neue/geänderte/deaktivierte Agenten)
   setInterval(updateSchedules, 60000);
 }
 
-// Queues, für die bereits ein Worker registriert wurde
-const workingQueues = new Set<string>();
+const LEGACY_PREFIX = 'agent-run-';
 
-async function ensureQueueWorker(queueName: string) {
-  if (workingQueues.has(queueName)) return;
+// Einmalig (idempotent): alte Pro-Agent-Queues leeren und löschen. Noch
+// wartende Jobs wandern in die gemeinsame Queue, damit kein geplanter Lauf
+// verloren geht.
+async function migrateLegacyQueues() {
   try {
-    await boss!.createQueue(queueName);
-  } catch {
-    // Queue existiert bereits -> ok
+    const { rows } = await pool!.query(
+      `SELECT name FROM pgboss.queue WHERE name LIKE 'agent-run-%'`);
+    if (!rows.length) return;
+    let moved = 0;
+    for (const { name } of rows) {
+      await boss!.unschedule(name).catch(() => {});
+      for (;;) {
+        const jobs: any[] = (await boss!.fetch(name, { batchSize: 50 }).catch(() => [])) || [];
+        if (!jobs.length) break;
+        for (const job of jobs) {
+          await boss!.send('agent-run', job.data, { retryLimit: 2, retryBackoff: true });
+          await boss!.complete(name, job.id).catch(() => {});
+          moved++;
+        }
+      }
+      await boss!.deleteQueue(name).catch((e: any) =>
+        console.warn(`[Worker] Alte Queue ${name} nicht gelöscht:`, e?.message || e));
+    }
+    console.log(`[Worker] ${rows.length} alte Pro-Agent-Queues aufgelöst, ${moved} wartende Jobs übernommen`);
+  } catch (e) {
+    console.error('[Worker] Umzug der alten Queues fehlgeschlagen:', e);
   }
-  await boss!.work(queueName, { batchSize: 1 }, async (jobs: any[]) => {
-    for (const job of jobs) await handleJob(job);
-  });
-  workingQueues.add(queueName);
 }
 
 async function updateSchedules() {
   try {
-    const { rows: agents } = await pool!.query('SELECT * FROM agents');
+    const { rows: agents } = await pool!.query('SELECT id, name, enabled, schedule_cron FROM agents');
+    const existing = new Map<string, string>();
+    for (const s of await boss!.getSchedules('agent-run')) existing.set(s.key, s.cron);
     const currentEnabled = new Set<string>();
 
     for (const agent of agents) {
-      if (agent.enabled) {
-        currentEnabled.add(agent.id);
-        const queueName = `agent-run-${agent.id}`;
-        try {
-          await ensureQueueWorker(queueName);
-          await boss!.schedule(queueName, agent.schedule_cron, { agent_id: agent.id, source: 'cron' }, {
-            retryLimit: 2,
-            retryBackoff: true,
-            tz: 'UTC' // Optional timezone handling
-          });
-        } catch (e) {
-          console.error(`[Worker] Konnte Agent ${agent.name} (${agent.id}) nicht planen:`, e);
-        }
+      if (!agent.enabled || !agent.schedule_cron) continue;
+      currentEnabled.add(agent.id);
+      // Nur schreiben, wenn neu oder geändert — sonst 75 Upserts pro Minute.
+      if (existing.get(agent.id) === agent.schedule_cron) continue;
+      try {
+        await boss!.schedule('agent-run', agent.schedule_cron, { agent_id: agent.id, source: 'cron' }, {
+          key: agent.id,
+          retryLimit: 2,
+          retryBackoff: true,
+          tz: 'UTC',
+        });
+      } catch (e) {
+        console.error(`[Worker] Konnte Agent ${agent.name} (${agent.id}) nicht planen:`, e);
       }
     }
 
-    // Unschedule disabled or deleted agents
-    const { rows: schedules } = await pool!.query('SELECT name FROM pgboss.schedule');
-    for (const row of schedules) {
-      if (row.name.startsWith('agent-run-')) {
-        const agentId = row.name.slice('agent-run-'.length);
-        if (!currentEnabled.has(agentId)) {
-          await boss!.unschedule(row.name);
-        }
-      }
+    // Zeitpläne deaktivierter oder gelöschter Agenten entfernen
+    for (const key of existing.keys()) {
+      if (!currentEnabled.has(key)) await boss!.unschedule('agent-run', key);
     }
   } catch (error) {
     console.error('[Worker] Error updating schedules:', error);
   }
+}
+
+// Änderungs-Hash: kanonisches JSON (Schlüssel auf jeder Ebene sortiert),
+// ohne Bibliotheksfelder — „geändert" heißt „die Quelle hat etwas Neues",
+// nicht „die eigene Bibliothek hat sich bewegt". Vorher lief hier ein
+// JSON.stringify mit Replacer-Array, das verschachtelte Schlüssel (z.B. die
+// Item-Titel in Listen) stillschweigend aus dem Hash ließ.
+function hashOf(data: Record<string, any>): string {
+  return crypto.createHash('sha256').update(canonicalJson(hashableView(data))).digest('hex');
 }
 
 async function sendRunNotification(agent: any, run_id: string, status: string, changed: boolean, data: any, error?: string) {
@@ -204,11 +230,15 @@ async function handleJob(job: any) {
   const searchParams = searchParamsOf(agent.params);
   agent.params = deriveParams(agent.params);
 
-  // 3. Jitter for cron jobs
-  if (source === 'cron' && agent.jitter_min > 0) {
-    const jitterMs = Math.floor(Math.random() * agent.jitter_min * 60 * 1000);
-    console.log(`[Worker] Jitter for agent ${agent.name}: waiting ${jitterMs}ms`);
-    await new Promise(resolve => setTimeout(resolve, jitterMs));
+  // 3. Jitter für Zeitplan-Läufe: Job später neu einstellen statt hier zu
+  // schlafen — ein schlafender Job würde einen der wenigen Lauf-Plätze
+  // bis zu jitter_min Minuten blockieren.
+  if (source === 'cron' && agent.jitter_min > 0 && !job.data.jittered) {
+    const jitterS = Math.floor(Math.random() * agent.jitter_min * 60);
+    console.log(`[Worker] Jitter for agent ${agent.name}: startet in ${jitterS}s`);
+    await boss!.send('agent-run', { ...job.data, jittered: true },
+      { startAfter: jitterS, retryLimit: 2, retryBackoff: true });
+    return;
   }
 
   // 4. Create or Update Run
@@ -243,8 +273,14 @@ async function handleJob(job: any) {
       // Schmerzgrenze-Prüfung ausgenommen, nur weil es keinen Playwright-Lauf
       // durchläuft.
       applyPlausibilityChecks(resultData, agent.params);
-      const canonicalStr = JSON.stringify(resultData, Object.keys(resultData).sort());
-      const data_hash = crypto.createHash('sha256').update(canonicalStr).digest('hex');
+      // Bibliotheks-Abgleich (Jellyfin/Emby/Plex): markiert Einträge, die
+      // schon in der eigenen Sammlung liegen bzw. wie viele Folgen fehlen.
+      // Wirft nie — Fehler landen als library_error im Ergebnis.
+      if (isLibraryConfigured(sources.media_library)) {
+        await enrichWithLibrary(resultData, sources.media_library);
+        if (resultData.library_error) console.warn(`[Worker] Run ${run_id}: Bibliotheks-Abgleich fehlgeschlagen — ${resultData.library_error}`);
+      }
+      const data_hash = hashOf(resultData);
       const { rows: last } = await pool!.query(
         `SELECT data_hash FROM results WHERE agent_id = $1 AND search_key IS NOT DISTINCT FROM $2
          ORDER BY created_at DESC LIMIT 1`, [agent_id, searchKey]);
@@ -284,9 +320,7 @@ async function handleJob(job: any) {
       // throw new Error(runResult.error);
     }
 
-    // Canonicalize JSON and hash
-    const canonicalStr = JSON.stringify(runResult.resultData, Object.keys(runResult.resultData).sort());
-    const data_hash = crypto.createHash('sha256').update(canonicalStr).digest('hex');
+    const data_hash = hashOf(runResult.resultData);
 
     // 7. Check changed flag
     const { rows: lastResults } = await pool!.query(
