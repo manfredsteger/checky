@@ -142,7 +142,7 @@ function CopyUrlButton({ url }: { url: string }) {
   );
 }
 
-function ItemRow({ item }: { item: any }) {
+export function ItemRow({ item }: { item: any }) {
   const title = item && typeof item === 'object' ? (item.title ?? item.url ?? JSON.stringify(item)) : String(item);
   const url = item && typeof item === 'object' ? item.url : null;
   const languages: string[] = item && Array.isArray(item.languages) ? item.languages : [];

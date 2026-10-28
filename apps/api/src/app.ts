@@ -7,6 +7,7 @@ import { recorderRouter } from './routes/recorder.js';
 import { libraryRouter } from './routes/library.js';
 import { settingsRouter } from './routes/settings.js';
 import { placesRouter } from './routes/places.js';
+import { quickSearchRouter } from './routes/quicksearch.js';
 
 // Kompositions-Wurzel: nur App-Setup + Router-Montage + zentrale Fehler-
 // behandlung. Die eigentliche Logik liegt modular in routes/ und lib/.
@@ -24,6 +25,7 @@ app.use(recorderRouter);
 app.use(libraryRouter);
 app.use(settingsRouter);
 app.use(placesRouter);
+app.use(quickSearchRouter);
 
 // Zentrale Fehlerbehandlung für alle Router.
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {

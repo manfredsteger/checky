@@ -26,6 +26,19 @@ export interface RunWithAgent extends Run {
   agent_name?: string;
 }
 
+export interface QuickSearchItem { title: string; url: string; size?: string; date?: string }
+export interface QuickSearch {
+  id: string;
+  provider: string;
+  params: { suche: string; limit: number };
+  status: 'queued' | 'running' | 'succeeded' | 'failed';
+  progress: { phase: 'list' | 'details'; done: number; total: number; matches: number } | null;
+  result: { count: number; items: QuickSearchItem[]; older_items?: QuickSearchItem[]; checked_total: number; details_fetched?: number } | null;
+  error: string | null;
+  created_at: string;
+  finished_at: string | null;
+}
+
 export const api = {
   getProjects: () => fetcher<Project[]>('/projects'),
   getProject: (id: string) => fetcher<Project>(`/projects/${id}`),
@@ -69,6 +82,10 @@ export const api = {
   importBundle: (bundle: CheckyBundle) => fetcher<{ ok: boolean; imported: { manifests: string[]; blueprints: string[] } }>('/library/import', { method: 'POST', body: JSON.stringify(bundle) }),
 
   // Settings
+  startQuickSearch: (data: { provider: string; suche: string; limit: number }) => fetcher<QuickSearch>('/quick-search', { method: 'POST', body: JSON.stringify(data) }),
+  getQuickSearch: (id: string) => fetcher<QuickSearch>(`/quick-search/${id}`),
+  getRecentQuickSearches: (provider: string) => fetcher<{ recent: string[]; latest_id: string | null }>(`/quick-search?provider=${encodeURIComponent(provider)}`),
+
   getSettings: () => fetcher<AppSettings>('/settings'),
   updateSettings: (data: UpdateSettings) => fetcher<AppSettings>('/settings', { method: 'PUT', body: JSON.stringify(data) }),
   runCleanup: () => fetcher<{ ok: boolean }>('/admin/cleanup', { method: 'POST' }),

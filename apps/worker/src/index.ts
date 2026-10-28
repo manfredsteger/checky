@@ -8,6 +8,7 @@ import { deriveParams } from './params.js';
 import { searchKeyOf, searchParamsOf, canonicalJson, hashableView, enrichWithLibrary, isLibraryConfigured } from '@checky/shared';
 import { enqueueNotification, processOutbox, runCleanup, checkRateLimit, getSettings } from './notify.js';
 import { fetchProvider } from './providers/index.js';
+import { handleQuickSearch, createTitleStore } from './quickSearch.js';
 
 const dbUrl = process.env.DB_URL;
 // KI nur aktiv, wenn ein Abo-Token vorhanden ist (sonst kein Self-Healing -> Run failt sauber).
@@ -80,6 +81,13 @@ async function start() {
   await boss.createQueue('recorder').catch(() => {});
   await boss.work('recorder', { batchSize: 1 }, async (jobs: any[]) => {
     for (const job of jobs) await handleRecorderJob(job);
+  });
+
+  // Schnellsuche (einmalige Provider-Suche ohne Agent, siehe quickSearch.ts).
+  // Eigener Arbeiter, damit eine Suche nicht hinter Zeitplan-Läufen wartet.
+  await boss.createQueue('quick-search').catch(() => {});
+  await boss.work('quick-search', { batchSize: 1 }, async (jobs: any[]) => {
+    for (const job of jobs) await handleQuickSearch(pool!, job.data.id);
   });
 
   // Cleanup-Queue: manueller Trigger + täglicher Cron.
@@ -267,7 +275,8 @@ async function handleJob(job: any) {
     // 4b. API-Quelle (kind:api): Provider-Adapter statt Recipe/Browser.
     if (agent.provider) {
       const { sources } = await getSettings(pool!);
-      const resultData = await fetchProvider(agent.provider, agent.params || {}, { sources });
+      const resultData = await fetchProvider(agent.provider, agent.params || {},
+        { sources, titleStore: createTitleStore(pool!, agent.provider) });
       // Dieselbe Plausibilitätsprüfung wie bei Browser-Recipes — ein
       // Provider-Ergebnis (z.B. Kiwi) ist sonst von der Direktflug-/
       // Schmerzgrenze-Prüfung ausgenommen, nur weil es keinen Playwright-Lauf
@@ -364,6 +373,8 @@ async function handleJob(job: any) {
     console.error(`[Worker] Run ${run_id} failed:`, error);
     await pool!.query(`UPDATE runs SET status = 'failed', finished_at = NOW(), error = $1 WHERE id = $2`, [String(error), run_id]);
     await sendRunNotification(agent, run_id, 'failed', false, null, String(error));
+    // Fehler mit noRetry (z.B. abgelaufene Zugangsdaten) nicht wiederholen.
+    if ((error as any)?.noRetry) return;
     throw error; // Rethrow to let pg-boss handle retries
   }
 }

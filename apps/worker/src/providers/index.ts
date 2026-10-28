@@ -15,6 +15,21 @@ import type { SourcesConfig } from '@checky/shared';
 // brauchen, ignorieren das zweite Argument einfach.
 export interface ProviderContext {
   sources: SourcesConfig;
+  // Dauerhafter Titel-Speicher (Tabelle torrent_index). Optional: ohne ihn
+  // nutzen Provider nur ihren Prozess-Cache.
+  titleStore?: TitleStore;
+  // Fortschritt für die Schnellsuche (geprüfte Detailseiten, Treffer).
+  onProgress?: (p: ProviderProgress) => void;
+}
+export interface TitleStore {
+  load(urls: string[]): Promise<Map<string, string>>;
+  save(entries: Array<{ url: string; listTitle: string; fullTitle: string; size: string; posted: string }>): Promise<void>;
+}
+export interface ProviderProgress {
+  phase: 'list' | 'details';
+  done: number;
+  total: number;
+  matches: number;
 }
 export type ProviderFn = (params: Record<string, any>, ctx: ProviderContext) => Promise<Record<string, any>>;
 

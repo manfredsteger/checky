@@ -15,6 +15,7 @@ import { de } from 'date-fns/locale';
 import type { Agent } from '@checky/shared';
 import { resolveDisplay, type Resolved } from '../lib/resultDisplay';
 import { ResultView } from '../ui/ResultView';
+import { QuickSearch } from '../ui/QuickSearch';
 import { CATEGORIES, categoryOf } from '../lib/categories';
 import { useAgentActivity, useAgentOutcome, useProjectActivity, useActivity, formatElapsed } from '../lib/activity';
 import { RunProgressBar, RunStatusChip, RunOutcomeChip } from '../ui/RunActivity';
@@ -329,6 +330,8 @@ export default function ProjectDetail() {
 
       <section className="flex-1 min-h-0 p-8 overflow-y-auto">
         {project.description && <p className="text-sm text-[#9ca3af] mb-6 max-w-3xl">{project.description}</p>}
+        {/* Schnellsuche für Projekte, deren Agenten eine durchsuchbare Torrent-Quelle nutzen. */}
+        {agents?.some(a => a.provider === 'lovetorrent') && <QuickSearch provider="lovetorrent" />}
         {overviewOpen && agents && agents.length > 0 && (
           <ProjectOverview project={project} agents={agents} manifest={manifest} />
         )}

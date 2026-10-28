@@ -18,7 +18,7 @@
       "type": "text",
       "default": "",
       "placeholder": "z. B. Anna Berg",
-      "help": "Filter über die geprüften neuesten Einträge: alle Wörter müssen im vollen Titel vorkommen (Groß-/Kleinschreibung egal). Der volle Titel steht nur auf der Detailseite (Studio, Genre-Liste , Format …), deshalb wird sie je neuem Eintrag einmal nachgeladen — Treffer zeigen dann diesen vollen Titel. Die Site-Suche selbst liefert keine Ergebnisse."
+      "help": "Filter über die geprüften neuesten Einträge: alle Wörter müssen im vollen Titel vorkommen (Groß-/Kleinschreibung egal). Der volle Titel steht nur auf der Detailseite (Studio, Genre-Liste, Format …), deshalb wird sie je neuem Eintrag einmal nachgeladen — Treffer zeigen dann diesen vollen Titel. Die Site-Suche selbst liefert keine Ergebnisse."
     },
     {
       "key": "limit",
@@ -55,7 +55,7 @@
   "default_schedule": "0 */6 * * *",
   "version": 2,
   "changelog": [
-    "v2: Suchbegriff prüft den vollen Detailseiten-Titel (Listen-Titel ist gekürzt, Genre-Begriffe  fehlen dort); Treffer tragen den vollen Titel; details_fetched im Ergebnis",
+    "v2: Suchbegriff prüft den vollen Detailseiten-Titel (Listen-Titel ist gekürzt, Genre-Begriffe fehlen dort); Treffer tragen den vollen Titel; details_fetched im Ergebnis",
     "v1: Erststand — tag/suche/limit, count/items/newest_title/newest_url/checked_total/available_total; Einträge tragen title/url/size/date"
   ]
 }

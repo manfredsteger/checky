@@ -37,25 +37,31 @@
 //
 // ABER: Die Liste zeigt nur einen gekürzten Titel („Beispieltitel"). Der volle
 // Titel steht erst auf der Detailseite im <title> — inklusive Studio, Genre-
-// Liste und Format, z.B. „[Studio] Beispieltitel (Szene
-// [Genre]) [2026 г., …, 1080p]".
-// Begriffe  tauchen NUR dort auf (nachgemessen 13.09.2026:
+// Liste und Format, z.B. „[Studio] Beispieltitel (Szene [Genre]) [2026 г.,
+// …, 1080p]". Genre-Begriffe tauchen NUR dort auf (nachgemessen 13.09.2026:
 // 5 von 60 neuesten Einträgen, 0 davon im Listen-Titel). Deshalb holt der
 // Filter je Kandidat die Detailseite und prüft den vollen Titel. Ein
 // prozessweiter Cache (URL → voller Titel; Titel ändern sich nicht) sorgt
 // dafür, dass Folge-Läufe nur die seit dem letzten Lauf neuen Einträge
 // nachladen — sonst wären es bei 600 Kandidaten 600 Abrufe alle 6 Stunden.
 
-import type { ProviderContext } from './index.js';
+import type { ProviderContext, TitleStore } from './index.js';
 
 const BASE = 'https://lovetorrent.net';
 // Fallback, falls kein Browser-UA hinterlegt ist — muss zum Browser passen,
 // in dem das Rätsel gelöst wurde (siehe Kopfkommentar).
 const DEFAULT_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36';
 const PER_PAGE = 30;
-const MAX_PAGES = 20; // harte Obergrenze je Lauf (600 Einträge) — die Seite hat 9500+ Seiten
+const MAX_PAGES = 50; // harte Obergrenze je Lauf (1500 Einträge ≈ 1 Woche) — die Seite hat 9500+ Seiten
+// Detailseiten gleichzeitig laden: 4 parallel + kurze Pause je Abruf hält
+// die Last klein und macht eine 300er-Suche in ~40 s statt ~3 min.
+const DETAIL_CONCURRENCY = 4;
 
-export class LovetorrentAuthError extends Error {}
+// noRetry: ein abgelaufener Cookie wird durch Wiederholen nicht besser —
+// Wiederholungen verbrauchen nur das Tageslimit der Domain.
+export class LovetorrentAuthError extends Error {
+  readonly noRetry = true;
+}
 
 // Der Nutzer trägt die Cookies als „Name=Wert; Name2=Wert2" ein; ein
 // versehentlich mitkopiertes „Cookie: " oder ein abschließendes Semikolon
@@ -205,20 +211,53 @@ export function parseFullTitle(html: string): string | null {
 const fullTitleCache = new Map<string, string>();
 export const _fullTitleCacheForTests = fullTitleCache;
 
-async function fullTitleOf(url: string, cookie: string, ua: string): Promise<string | null> {
-  const cached = fullTitleCache.get(url);
-  if (cached !== undefined) return cached;
+async function fetchFullTitle(url: string, cookie: string, ua: string): Promise<string | null> {
   try {
     const html = await fetchHtml(url.replace(BASE, ''), cookie, ua);
-    const t = parseFullTitle(html);
-    if (t) fullTitleCache.set(url, t);
-    return t;
+    return parseFullTitle(html);
   } catch (e) {
     if (e instanceof LovetorrentAuthError) throw e; // abgelaufener Cookie: sofort abbrechen, nicht 600× versuchen
     return null;
   } finally {
     await new Promise(r => setTimeout(r, 250));
   }
+}
+
+// Volle Titel für alle Kandidaten besorgen: erst Prozess-Cache, dann der
+// dauerhafte Index, nur der Rest wird von der Seite geladen (parallel) und
+// danach im Index abgelegt.
+async function resolveFullTitles(
+  rows: Row[], cookie: string, ua: string, store: TitleStore | undefined,
+  onFetched: (done: number, total: number) => void,
+): Promise<number> {
+  let missing = rows.filter(r => !fullTitleCache.has(r.url));
+  if (store && missing.length) {
+    const known = await store.load(missing.map(r => r.url));
+    for (const [url, t] of known) fullTitleCache.set(url, t);
+    missing = missing.filter(r => !fullTitleCache.has(r.url));
+  }
+  let next = 0, done = 0;
+  const fresh: Row[] = [];
+  onFetched(0, missing.length);
+  const worker = async () => {
+    while (next < missing.length) {
+      const r = missing[next++];
+      const t = await fetchFullTitle(r.url, cookie, ua);
+      if (t) { fullTitleCache.set(r.url, t); fresh.push(r); }
+      onFetched(++done, missing.length);
+    }
+  };
+  try {
+    await Promise.all(Array.from({ length: Math.min(DETAIL_CONCURRENCY, missing.length) }, worker));
+  } finally {
+    // Auch bei Abbruch (Cookie abgelaufen) das bis dahin Geladene sichern.
+    if (store && fresh.length) {
+      await store.save(fresh.map(r => ({
+        url: r.url, listTitle: r.title, fullTitle: fullTitleCache.get(r.url)!, size: r.size, posted: r.date,
+      }))).catch(e => console.warn('[lovetorrent] Titel-Index nicht gespeichert:', e?.message || e));
+    }
+  }
+  return fresh.length;
 }
 
 export async function fetchLovetorrent(params: Record<string, any>, ctx: ProviderContext): Promise<Record<string, any>> {
@@ -237,6 +276,9 @@ export async function fetchLovetorrent(params: Record<string, any>, ctx: Provide
   const basePath = slug ? `/tags/${encodeURIComponent(slug)}/` : '/';
   const pages = Math.min(MAX_PAGES, Math.max(1, Math.ceil(limit / PER_PAGE)));
 
+  const progress = (p: Parameters<NonNullable<ProviderContext['onProgress']>>[0]) => {
+    try { ctx?.onProgress?.(p); } catch { /* Fortschritt ist nur Anzeige */ }
+  };
   const rows: Row[] = [];
   let availableTotal: number | null = null;
   const now = new Date();
@@ -254,6 +296,7 @@ export async function fetchLovetorrent(params: Record<string, any>, ctx: Provide
       break; // letzte Seite überschritten
     }
     rows.push(...pageRows);
+    progress({ phase: 'list', done: Math.min(rows.length, limit), total: limit, matches: 0 });
     if (rows.length >= limit) break;
     await new Promise(r => setTimeout(r, 300));
   }
@@ -266,12 +309,14 @@ export async function fetchLovetorrent(params: Record<string, any>, ctx: Provide
   // Detailseiten-Titel (siehe Kopfkommentar); Treffer tragen dann diesen
   // vollen Titel, weil er das Wesentliche (Studio, Genre, Format) erst nennt.
   let detailsFetched = 0;
+  if (search) {
+    detailsFetched = await resolveFullTitles(candidates, cookie, ua, ctx?.titleStore,
+      (done, total) => progress({ phase: 'details', done, total, matches: 0 }));
+  }
   const matches: Array<Row & { fullTitle?: string }> = [];
   for (const r of candidates) {
     if (!search) { matches.push(r); continue; }
-    const before = fullTitleCache.has(r.url);
-    const full = await fullTitleOf(r.url, cookie, ua);
-    if (!before && full) detailsFetched++;
+    const full = fullTitleCache.get(r.url);
     if (matchesSearch(full ? `${r.title} ${full}` : r.title, search)) matches.push({ ...r, fullTitle: full || undefined });
   }
 
